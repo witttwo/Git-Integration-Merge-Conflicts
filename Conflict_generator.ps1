@@ -2,7 +2,12 @@ $i = Read-Host "Podaj swoje inicjaly"
 $devBranch = "dev_$i"
 $baseBranch = "baza_$i"
 
-# 1. ZABEZPIECZENIE ORYGINAŁÓW (Wspólny przodek)
+# 1. ZAPAMIĘTANIE PUNKTU STARTOWEGO (Gwarantuje, że nie ruszymy obecnej gałęzi)
+$startCommit = git rev-parse HEAD
+
+# ==========================================
+# 2. ZABEZPIECZENIE ORYGINAŁÓW
+# ==========================================
 $tmdlPath = "Git Conflict.SemanticModel\definition\tables\_Global Measures.tmdl"
 $visOldPath = "Git Conflict.Report\definition\pages\7a1007e13b28c6d51010\visuals\ff390bfdbc0aea10ab08\visual.json"
 $tmdlOryginal = Get-Content $tmdlPath -Raw -Encoding UTF8
@@ -14,9 +19,9 @@ $regexSVG = "<svg xmlns='http://www.w3.org/2000/svg'.*?</svg>"
 $noweSVG = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-align-end-horizontal-icon lucide-align-end-horizontal'><rect width='6' height='16' x='4' y='2' rx='2'/><rect width='6' height='9' x='14' y='9' rx='2'/><path d='M22 22H2'/></svg>"
 
 # ==========================================
-# 2. GAŁĄŹ DEV (Nowe KPI, OMG test, ColorId 7)
+# 3. GAŁĄŹ DEV (Tworzona ze startCommit)
 # ==========================================
-git checkout -b $devBranch 2>$null
+git checkout -B $devBranch $startCommit 2>$null
 
 $tmdlDev = $tmdlOryginal -replace $regexTmdl1, '"OMG test ✔"'
 $tmdlDev = $tmdlDev -replace $regexTmdl2, '"GIT Conflict Test"'
@@ -64,7 +69,7 @@ $json1 = @'
 { "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json", "name": "bd321ca30d8572eac95e", "position": { "x": 852.99, "y": 64.66, "z": 20001, "height": 158.75, "width": 290, "tabOrder": 20001 }, "visual": { "visualType": "image", "objects": { "image": [ { "properties": { "sourceType": { "expr": { "Literal": { "Value": "'imageData'" } } }, "sourceField": { "expr": { "Measure": { "Expression": { "SourceRef": { "Entity": "_Global Measures" } }, "Property": "KPI Card Orders IMG" } } } } } ] }, "visualContainerObjects": { "dropShadow": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } } } } ], "border": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } }, "radius": { "expr": { "Literal": { "Value": "20D" } } } } } ], "background": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "transparency": { "expr": { "Literal": { "Value": "0D" } } } } } ] }, "drillFilterOtherVisuals": true } }
 '@
 $json2 = @'
-{ "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json", "name": "632c3c5cf00bcacde04d", "position": { "x": 543.75, "y": 66.25, "z": 20002, "height": 157.5, "width": 290, "tabOrder": 20002 }, "visual": { "visualType": "image", "objects": { "image": [ { "properties": { "sourceType": { "expr": { "Literal": { "Value": "'imageData'" } } }, "sourceField": { "expr": { "Measure": { "Expression": { "SourceRef": { "Entity": "_Global Measures" } }, "Property": "KPI Card Quota IMG" } } } } } ] }, "visualContainerObjects": { "dropShadow": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } }, "transparency": { "expr": { "Literal": { "Value": "35D" } } }, "shadowBlur": { "expr": { "Literal": { "Value": "15D" } } } } } ], "border": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } }, "radius": { "expr": { "Literal": { "Value": "20D" } } }, "width": { "expr": { "Literal": { "Value": "1D" } } } } } ], "background": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": 0 } } } } }, "transparency": { "expr": { "Literal": { "Value": "0D" } } } } } ], "title": [ { "properties": { "show": { "expr": { "Literal": { "Value": "false" } } }, "titleWrap": { "expr": { "Literal": { "Value": "true" } } }, "fontColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#0F3460'" } } } } }, "fontSize": { "expr": { "Literal": { "Value": "'14'" } } }, "fontFamily": { "expr": { "Literal": { "Value": "'Arial'" } } } } } ], "spacing": [ { "properties": { "verticalSpacing": { "expr": { "Literal": { "Value": "2D" } } } }, "selector": { "id": "default" } } ], "padding": [ { "properties": { "top": { "expr": { "Literal": { "Value": "5D" } } }, "bottom": { "expr": { "Literal": { "Value": "0D" } } }, "left": { "expr": { "Literal": { "Value": "0D" } } }, "right": { "expr": { "Literal": { "Value": "0D" } } } } } ] }, "drillFilterOtherVisuals": true } }
+{ "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json", "name": "632c3c5cf00bcacde04d", "position": { "x": 543.75, "y": 66.25, "z": 20002, "height": 157.5, "width": 290, "tabOrder": 20002 }, "visual": { "visualType": "image", "objects": { "image": [ { "properties": { "sourceType": { "expr": { "Literal": { "Value": "'imageData'" } } }, "sourceField": { "expr": { "Measure": { "Expression": { "SourceRef": { "Entity": "_Global Measures" } }, "Property": "KPI Card Quota IMG" } } } } } ] }, "visualContainerObjects": { "dropShadow": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } }, "transparency": { "expr": { "Literal": { "Value": "35D" } } }, "shadowBlur": { "expr": { "Literal": { "Value": "15D" } } } } } ], "border": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } }, "radius": { "expr": { "Literal": { "Value": "20D" } } }, "width": { "expr": { "Literal": { "Value": "1D" } } } } } ], "background": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": 0 } } } } }, "transparency": { "expr": { "Literal": { "Value": "0D" } } } } }, "title": [ { "properties": { "show": { "expr": { "Literal": { "Value": "false" } } }, "titleWrap": { "expr": { "Literal": { "Value": "true" } } }, "fontColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#0F3460'" } } } } }, "fontSize": { "expr": { "Literal": { "Value": "'14'" } } }, "fontFamily": { "expr": { "Literal": { "Value": "'Arial'" } } } } } ], "spacing": [ { "properties": { "verticalSpacing": { "expr": { "Literal": { "Value": "2D" } } } }, "selector": { "id": "default" } } ], "padding": [ { "properties": { "top": { "expr": { "Literal": { "Value": "5D" } } }, "bottom": { "expr": { "Literal": { "Value": "0D" } } }, "left": { "expr": { "Literal": { "Value": "0D" } } }, "right": { "expr": { "Literal": { "Value": "0D" } } } } } ] }, "drillFilterOtherVisuals": true } }
 '@
 $json3 = @'
 { "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json", "name": "093aef5b47cf7c8c4607", "position": { "x": 236.66, "y": 64.44, "z": 20003, "height": 158.88, "width": 290, "tabOrder": 20003 }, "visual": { "visualType": "image", "objects": { "image": [ { "properties": { "sourceType": { "expr": { "Literal": { "Value": "'imageData'" } } }, "sourceField": { "expr": { "Measure": { "Expression": { "SourceRef": { "Entity": "_Global Measures" } }, "Property": "KPI Card Net Sales IMG" } } } } } ] }, "visualContainerObjects": { "dropShadow": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } }, "transparency": { "expr": { "Literal": { "Value": "35D" } } }, "shadowBlur": { "expr": { "Literal": { "Value": "15D" } } } } } ], "border": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "Literal": { "Value": "'#006084'" } } } } }, "radius": { "expr": { "Literal": { "Value": "20D" } } }, "width": { "expr": { "Literal": { "Value": "1D" } } } } } ], "background": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "Literal": { "Value": "'#006084'" } } } } }, "transparency": { "expr": { "Literal": { "Value": "0D" } } } } } ], "title": [ { "properties": { "show": { "expr": { "Literal": { "Value": "false" } } }, "titleWrap": { "expr": { "Literal": { "Value": "true" } } }, "fontColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#0F3460'" } } } } }, "fontSize": { "expr": { "Literal": { "Value": "'14'" } } }, "fontFamily": { "expr": { "Literal": { "Value": "'Arial'" } } } } } ], "spacing": [ { "properties": { "verticalSpacing": { "expr": { "Literal": { "Value": "2D" } } } }, "selector": { "id": "default" } } ], "padding": [ { "properties": { "top": { "expr": { "Literal": { "Value": "5D" } } }, "bottom": { "expr": { "Literal": { "Value": "0D" } } }, "left": { "expr": { "Literal": { "Value": "0D" } } }, "right": { "expr": { "Literal": { "Value": "0D" } } } } } ] }, "drillFilterOtherVisuals": true } }
@@ -75,13 +80,12 @@ Set-Content -Path "$vis2Path\visual.json" -Value $json2 -Encoding utf8
 Set-Content -Path "$vis3Path\visual.json" -Value $json3 -Encoding utf8
 
 git add .
-git commit -m "Dev: Dodano 3 KPI, OMG test oraz marker ColorId 7"
+git commit -m "Dev: Dodano 3 KPI, OMG test oraz marker ColorId 7" --quiet
 
 # ==========================================
-# 3. GAŁĄŹ BAZA (Diament, Hex #07B189, Net Sales)
+# 4. GAŁĄŹ BAZA (Tworzona ze startCommit)
 # ==========================================
-git checkout - 2>$null 
-git checkout -b $baseBranch 2>$null
+git checkout -B $baseBranch $startCommit 2>$null
 
 $tmdlBase = $tmdlOryginal -replace $regexTmdl1, '"Heck yeah, consistency ✔"'
 $tmdlBase = $tmdlBase -replace $regexTmdl2, '"Net Sales Updated"'
@@ -117,9 +121,10 @@ Zrobiłeś commita bez podania nazwy, terminal nagle zrobił się na pełen ekra
 Set-Content -Path "README.md" -Value $readmeBase -Encoding UTF8
 
 git add .
-git commit -m "Baza: Heck yeah, zielony Hex, Diament oraz ratunek w VIM"
+git commit -m "Baza: Heck yeah, zielony Hex, Diament oraz ratunek w VIM" --quiet
 
 # ==========================================
-# 4. WYWOŁANIE KONFLIKTU
+# 5. WYWOŁANIE KONFLIKTU
 # ==========================================
+Write-Host "Inicjowanie kolizji gałęzi..." -ForegroundColor Cyan
 git merge $devBranch
