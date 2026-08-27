@@ -1,0 +1,58 @@
+DEFINE
+    FUNCTION SVG_Progress_Bar_With_Text_Parametrized = (   
+    _sales : decimal expr,
+    _quota : decimal expr,
+    _attainment : decimal expr,
+    _globalMax : decimal expr,
+    _colorSalesParam : string expr,
+    _colorQuotaParam : string expr,
+    _colorSuccessParam : string expr,
+    _textColorParam : string expr
+) =>
+    
+// 1. Definicja kolorów z obsługą BLANK() (Domyślne kolory dla jasnego tła)
+VAR _colorSales = IF(ISBLANK(_colorSalesParam), "#006084", _colorSalesParam) 
+VAR _colorQuota = IF(ISBLANK(_colorQuotaParam), "#E2E8F0", _colorQuotaParam) 
+VAR _colorSuccess = IF(ISBLANK(_colorSuccessParam), "#148A5E", _colorSuccessParam) 
+VAR _textColor = IF(ISBLANK(_textColorParam), "#333333", _textColorParam)
+
+// Dynamiczny kolor: jeśli sprzedaż >= cel, pasek zmienia się na kolor sukcesu
+VAR _FinalSalesColor = IF(_sales >= _quota, _colorSuccess, _colorSales)
+
+// 2. Wymiary obszaru
+VAR _W = 200
+VAR _H = 50 
+VAR _DrawArea = _W 
+
+// 3. Skalowanie szerokości
+VAR _SafeMax = IF(ISBLANK(_globalMax) || _globalMax = 0, 1, _globalMax)
+VAR _Scale = DIVIDE(_DrawArea, _SafeMax)
+
+VAR _SalesW = COALESCE(_sales, 0) * _Scale
+VAR _QuotaW = COALESCE(_quota, 0) * _Scale
+
+// 4. Formatowanie tekstów 
+VAR _SalesText = IF(NOT ISBLANK(_sales), FORMAT(_sales, "$#,##0"), "")
+VAR _PctText = IF(NOT ISBLANK(_attainment), FORMAT(_attainment, "0.0%"), "")
+
+// 5. Budowa SVG z DUŻYMI elementami
+VAR _SVG = 
+"data:image/svg+xml;utf8," &
+"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 " & _W & " " & _H & "'>" &
+    
+    "<!-- Tekst z lewej -->" &
+    "<text x='0' y='18' font-family='Segoe UI' font-size='16' font-weight='600' fill='" & _textColor & "'>" & _SalesText & "</text>" &
+    
+    "<!-- Tekst z prawej -->" &
+    "<text x='" & _W & "' y='18' font-family='Segoe UI' font-size='16' font-weight='bold' fill='" & _FinalSalesColor & "' text-anchor='end'>" & _PctText & "</text>" &
+
+    "<!-- Pasek tła (Cel / Quota) -->" &
+    "<rect x='0' y='28' width='" & _QuotaW & "' height='18' rx='9' fill='" & _colorQuota & "' />" &
+    
+    "<!-- Pasek wypełnienia (Sprzedaż) -->" &
+    "<rect x='0' y='28' width='" & _SalesW & "' height='18' rx='9' fill='" & _FinalSalesColor & "' />" &
+    
+"</svg>"
+
+RETURN 
+    IF(ISBLANK(_quota) && ISBLANK(_sales), BLANK(), _SVG)

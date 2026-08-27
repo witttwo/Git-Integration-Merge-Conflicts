@@ -1,0 +1,1382 @@
+table '_Global Measures'
+	lineageTag: ebee8586-6453-421c-96b9-4a7c4b8c0652
+
+	measure HTML_KPI_Card_Dynamic =
+			
+			-- ================= CONFIG (tune thresholds here) =================
+			VAR _CvGood = 0.12      -- CV <= 12%  -> consistent
+			VAR _CvOk   = 0.22      -- CV <= 22%  -> moderate
+			VAR _Flat   = 0.02      -- +/-2% newer vs older half -> flat
+			VAR _Strong = 0.10      -- >10% move  -> "sharply", else "trending"
+			
+			-- ===== WINDOW: last 6 FULL months up to TODAY (not end of data) =====
+			VAR _Anchor = EOMONTH ( TODAY (), -1 )          -- last completed month end, e.g. Jun 30
+			VAR _Start  = EOMONTH ( TODAY (), -7 ) + 1      -- first day 6 months earlier, e.g. Jan 1
+			VAR _Monthly =
+			    CALCULATETABLE (
+			        ADDCOLUMNS (
+			            VALUES ( DimDate[MonthYear] ),
+			            "@MonthEnd", CALCULATE ( MAX ( DimDate[Date] ) ),
+			            "@Val", [Sales AVG by PH]
+			        ),
+			        DimDate[Date] >= _Start,
+			        DimDate[Date] <= _Anchor,
+			        ALL ( DimDate )                          -- ignore the page date slicer
+			    )
+			VAR _Data   = FILTER ( _Monthly, [@Val] > 0 )
+			VAR _Months = COUNTROWS ( _Data )
+			VAR _Avg    = AVERAGEX ( _Data, [@Val] )
+			VAR _StdDev = STDEVX.S ( _Data, [@Val] )
+			VAR MetricValue = DIVIDE ( _StdDev, _Avg )       -- = [Sales KPI Deviation]
+			
+			-- ===== TREND: newer half vs older half of the window =====
+			VAR _Recent3   = TOPN ( 3, _Data, [@MonthEnd], DESC )
+			VAR _Prior     = EXCEPT ( _Data, _Recent3 )
+			VAR _AvgRecent = AVERAGEX ( _Recent3, [@Val] )
+			VAR _AvgPrior  = AVERAGEX ( _Prior, [@Val] )
+			VAR _TrendPct  = DIVIDE ( _AvgRecent - _AvgPrior, _AvgPrior )
+			
+			-- ===== FLAGS =====
+			VAR _Consistent = MetricValue <= _CvGood
+			VAR _Moderate   = MetricValue <= _CvOk
+			VAR _Rising     = _TrendPct >  _Flat
+			VAR _Falling    = _TrendPct < -_Flat
+			VAR _BigMove    = ABS ( _TrendPct ) > _Strong
+			
+			-- ===== MONTH LABELS ("MMM yy" if the window crosses a year) =====
+			VAR _RecFrom = FORMAT ( MINX ( _Recent3, [@MonthEnd] ), "MMM", "en-US" )
+			VAR _RecTo   = FORMAT ( MAXX ( _Recent3, [@MonthEnd] ), "MMM", "en-US" )
+			VAR _PriFrom = FORMAT ( MINX ( _Prior,   [@MonthEnd] ), "MMM", "en-US" )
+			VAR _PriTo   = FORMAT ( MAXX ( _Prior,   [@MonthEnd] ), "MMM", "en-US" )
+			VAR _RecLbl  = IF ( _RecFrom = _RecTo, _RecFrom, _RecFrom & "–" & _RecTo )
+			VAR _PriLbl  = IF ( _PriFrom = _PriTo, _PriFrom, _PriFrom & "–" & _PriTo )
+			VAR _WinLbl  = IF ( ISBLANK ( _PriFrom ), _RecLbl, _PriFrom & "–" & _RecTo )
+			
+			-- ===== NARRATIVE: short natural sentences, calm -> drama (PL register) =====
+			VAR MainTitle =
+			    SWITCH ( TRUE (),
+			        _Consistent && NOT ( _Falling ), "High sales consistency ✔",
+			        _Consistent,                     "Consistent, but trending down",
+			        _Moderate,                       "Moderate sales consistency",
+			                                         "Volatile sales month to month"
+			    )
+			VAR _VarPart =
+			    SWITCH ( TRUE (),
+			        _Consistent, "Steady, predictable rhythm",
+			        _Moderate,   "Some month-to-month swing",
+			                     "Erratic month to month"
+			    )
+			VAR _TrendPhrase =
+			    SWITCH ( TRUE (),
+			        _Rising  && _BigMove, "now rising sharply <span class='up'>↗</span>",
+			        _Rising,              "now trending up <span class='up'>↗</span>",
+			        _Falling && _BigMove, "now falling sharply <span class='dn'>↘</span>",
+			        _Falling,             "now trending down <span class='dn'>↘</span>",
+			                              "and holding flat"
+			    )
+			VAR Subtitle =
+			    IF (
+			        ISBLANK ( _TrendPct ),
+			        _VarPart & ".",
+			        _VarPart & ", " & _TrendPhrase & " (" & _RecLbl & " vs " & _PriLbl & ")."
+			    )
+			
+			VAR _SelName     = [Selected PH Name]
+			VAR _RepSelected = NOT ISBLANK ( _SelName ) && _SelName <> "Whole team"
+			VAR _PerRep = IF ( _RepSelected, "", " per rep" )
+			VAR _AvgK   = FORMAT ( _Avg,    "$#,##0,", "en-US" ) & "K"
+			VAR _StdK   = FORMAT ( _StdDev, "$#,##0,", "en-US" ) & "K"
+			VAR FooterText =
+			    "The last " & _Months & " months average is <span class='hl'>" & _AvgK & "</span>/mo" & _PerRep
+			    & ", with a typical swing of <span class='hl'>±" & _StdK & "</span> (1σ)."
+			
+			VAR MetricColor =
+			    SWITCH ( TRUE (),
+			        _Consistent, "#006084",
+			        _Moderate,   "#c77700",
+			                     "#d93025"
+			    )
+			
+			VAR BadgeText = [Selected PH Name]
+			VAR _ID =
+			    "kpi_"
+			        & SUBSTITUTE ( SUBSTITUTE ( SUBSTITUTE ( BadgeText, " ", "" ), ".", "" ), "'", "" )
+			
+			-- ===== OVERLAY (300s layer: definition + exact numbers) =====
+			VAR ExplanationHeader = "COEFFICIENT OF VARIATION (CV)"
+			VAR ExplanationDesc =
+			    "Stability of monthly Net Sales over the last 6 months for the selected rep or the whole team. Standard deviation divided by the mean — the closer to 0%, the more consistent the workload."
+			VAR WindowHeader = "THIS " & _Months & "-MONTH WINDOW"
+			VAR _TrendTxt = FORMAT ( ABS ( _TrendPct ), "0.0%", "en-US" )
+			VAR WindowDesc =
+			    _WinLbl & ": monthly sales" & _PerRep
+			    & " averaged " & FORMAT ( _Avg, "$#,##0", "en-US" )
+			    & ", with a typical month-to-month swing of ±" & FORMAT ( _StdDev, "$#,##0", "en-US" )
+			    & " (1σ)."
+			    & IF (
+			        ISBLANK ( _TrendPct ),
+			        "",
+			        " Recent months (" & _RecLbl & ") ran "
+			            & IF ( _TrendPct >= 0, "+", "-" ) & _TrendTxt & " vs " & _PriLbl & "."
+			    )
+			
+			VAR HtmlString =
+			"<!DOCTYPE html>
+			<html style='margin:0; padding:0; overflow:hidden;'>
+			<head>
+			<style>
+			    html, body { margin:0; padding:0; height:100%; width:100%; overflow:hidden; background-color:transparent; }
+			    .main-wrapper { position:relative; width:100%; height:100%; padding:3vw; box-sizing:border-box; font-family:'Montserrat', Tahoma, Geneva, Verdana, sans-serif; overflow:hidden; }
+			    .badge { background-color:#006084; color:white; padding:1vw 2.5vw; border-radius:4vw; font-size:3vw; font-weight:700; display:inline-block; margin-bottom:2vw; }
+			    .title { font-size:4.5vw; font-weight:700; color:#1a1a1a; margin-bottom:1.5vw; }
+			    .metric-container { margin-bottom:2vw; }
+			    .metric-value { font-size:4vw; font-weight:700; color:" & MetricColor & "; cursor:pointer; display:inline-block; position:relative; z-index:5; }
+			    .cvtag { font-size:2vw; font-weight:700; color:#9aa0aa; margin-left:0.6vw; margin-right:1vw; letter-spacing:0.5px; }
+			    .metric-subtitle { font-size:3.2vw; color:#555555; font-weight:400; }
+			    .footer { font-size:2.8vw; color:#555555; font-weight:400; }
+			    .hl { color:#006084; font-weight:700; }
+			    .up { color:#188038; font-weight:700; }
+			    .dn { color:#d93025; font-weight:700; }
+			    .overlay { position:absolute; top:0; left:0; width:100%; height:100%; background:#006084; color:#FFFFFF; padding:4vw 5vw; box-sizing:border-box; display:flex; flex-direction:column; justify-content:center; transform:translateY(110%); visibility:hidden; transition:transform 0.35s cubic-bezier(0.16,1,0.3,1), visibility 0.35s; z-index:10; border-radius:4vw; text-align:left; }
+			    .metric-value:hover ~ .overlay, .overlay:hover { transform:translateY(0); visibility:visible; }
+			    .ov-block { margin-bottom:2.2vw; }
+			    .ov-block:last-child { margin-bottom:0; }
+			    .ov-header { font-size:2.2vw; font-weight:700; opacity:0.5; margin-bottom:1vw; letter-spacing:1px; text-transform:uppercase; }
+			    .ov-desc { font-size:2.6vw; line-height:1.4; font-weight:400; }
+			</style>
+			</head>
+			<body>
+			    <div class='main-wrapper'>
+			        <div class='badge'>" & BadgeText & "</div>
+			        <div class='title'>" & MainTitle & "</div>
+			        <div class='metric-container'>
+			            <span class='metric-value' id='count-" & _ID & "'>0.0%</span><span class='cvtag'>CV</span>
+			            <div class='overlay'>
+			                <div class='ov-block'>
+			                    <div class='ov-header'>" & ExplanationHeader & "</div>
+			                    <div class='ov-desc'>" & ExplanationDesc & "</div>
+			                </div>
+			                <div class='ov-block'>
+			                    <div class='ov-header'>" & WindowHeader & "</div>
+			                    <div class='ov-desc'>" & WindowDesc & "</div>
+			                </div>
+			            </div>
+			            <span class='metric-subtitle'>" & Subtitle & "</span>
+			        </div>
+			        <div class='footer'>" & FooterText & "</div>
+			    </div>
+			
+			    <script>
+			        (function() {
+			            const target = parseFloat('" & FORMAT ( MetricValue, "0.0000", "en-US" ) & "');
+			            const element = document.getElementById('count-" & _ID & "');
+			            const duration = 1500;
+			            const start = performance.now();
+			
+			            function update(now) {
+			                const elapsed = now - start;
+			                const progress = Math.min(elapsed / duration, 1);
+			                const ease = 1 - Math.pow(1 - progress, 3);
+			                const current = target * ease * 100;
+			                element.textContent = current.toFixed(1) + '%';
+			                if (progress < 1) { requestAnimationFrame(update); }
+			            }
+			            requestAnimationFrame(update);
+			        })();
+			    </script>
+			</body>
+			</html>"
+			
+			RETURN
+			    IF ( _Months <= 1 || ISBLANK ( _Avg ) || _Avg = 0, BLANK (), HtmlString )
+		displayFolder: Kilometrówka
+		lineageTag: facd5e16-bf71-45e0-b40e-32f7ed6a70b3
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Selected PH Name' =
+			
+			SWITCH(
+			    TRUE(),
+			    HASONEVALUE(DimRep[RepName]) && ISFILTERED(DimRep[RepName]), SELECTEDVALUE(DimRep[RepName]),
+			    ISFILTERED(DimRep[RepName]), "Selected people",
+			    "Whole team"
+			)
+		displayFolder: Kilometrówka
+		lineageTag: db0f6adb-a89d-4372-936a-d38ff34097cc
+
+	measure 'Visits KPI Dashboard Footer' =
+			VAR _Sales   = [Net Sales]
+			    VAR _MaxDate = CALCULATE(MAX(DimDate[Date]),
+			                    ALL(FactSales),ALL(DimDate),ALL(DimDealer),ALL(DimSku),ALL(DimRep))
+			    VAR _Period  = DATESINPERIOD(DimDate[Date], _MaxDate, -6, MONTH)
+			
+			    VAR _MonthlyData =
+			        CALCULATETABLE(
+			            ADDCOLUMNS(
+			                VALUES(DimDate[MonthYear]),
+			                "@Avg", CALCULATE([Sales AVG by PH])
+			            ),
+			            _Period
+			        )
+			    VAR _FilteredData = FILTER(_MonthlyData, [@Avg] > 0)
+			    VAR _MonthsCount  = COUNTROWS(_FilteredData)
+			    VAR _Mean         = AVERAGEX(_FilteredData, [@Avg])
+			    VAR _SumSqDiff    = SUMX(_FilteredData, POWER([@Avg] - _Mean, 2))
+			    VAR _Odchylenie   = SQRT(DIVIDE(_SumSqDiff, _MonthsCount - 1))
+			    VAR _Srednia      = FORMAT(_Mean,       "$#,0")
+			    VAR _OdchStr      = FORMAT(_Odchylenie, "$#,0")
+			    VAR _OkresTekst   = IF(_MonthsCount >= 6, "6 miesięcy", _MonthsCount & " m-cy")
+			    VAR _CzyJedenRep  = HASONEVALUE(DimRep[RepName]) && ISFILTERED(DimRep[RepName])
+			    VAR _TekstJedn    = IF(_CzyJedenRep, " (odchylenie o ", "/rep (odchylenie o ")
+			
+			    RETURN
+			    IF(
+			        NOT(ISBLANK(_Sales)) && _MonthsCount > 1,
+			        "Z ostatnich " & _OkresTekst & ": średnio " & _Srednia & _TekstJedn & _OdchStr & ")"
+			    )
+		lineageTag: 8a4f43a5-4638-4648-a303-021832d0dae4
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Sales KPI Deviation' = Deviation_6_Months ( [Net Sales], [Sales AVG by PH] )
+		formatString: 0.00%;-0.00%;0.00%
+		displayFolder: Kilometrówka
+		lineageTag: 8b525bb3-b625-41d3-8953-6cd38b267297
+
+	measure 'Sales AVG by PH' =
+			
+			
+			AVERAGEX(
+			    SUMMARIZE(
+			        DimRep,
+			        DimRep[RepName],
+			        "a",[Net Sales]),
+			        [a]
+			)
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		displayFolder: Kilometrówka
+		lineageTag: 21e2a787-f244-4512-b5fe-44873b021c22
+
+		annotation PBI_FormatHint = {"currencyCulture":"en-US"}
+
+	measure 'Sales AVG by PH ALL' = ```
+			
+			CALCULATE(
+			AVERAGEX(
+			VALUES(DimRep[RepKey]),
+			[Net Sales]
+			),
+			ALL(DimRep[RepName]))
+			
+			```
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		displayFolder: Kilometrówka
+		lineageTag: f2369e71-c7eb-445c-9c84-e9023f4ce019
+
+		annotation PBI_FormatHint = {"currencyCulture":"en-US"}
+
+	measure 'Visits KPI Dashboard Header' =
+			
+			VAR _CV     = [Sales KPI Deviation]
+			VAR _Sales  = [Net Sales]
+			VAR _IconGood    = "<svg style='margin-left:6px; flex-shrink:0; width:22px; height:22px; stroke:#10b981;' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke-width='2.5' 			stroke-linecap='round' stroke-linejoin='round'><path d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/><path d='m9 11 3 3L22 4'/></svg>"
+			VAR _IconNeutral = "<svg style='margin-left:6px; flex-shrink:0; width:22px; height:22px; stroke:#94a3b8;' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke-width='2.5' 			stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='M8 12h8'/></svg>"
+			VAR _IconAlert   = "<svg style='margin-left:6px; flex-shrink:0; width:22px; height:22px; stroke:#f59e0b;' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke-width='2.5' 			stroke-linecap='round' stroke-linejoin='round'><path d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/><path d='M12 9v4'/><path d='M12 17h.01'/></svg>"
+			VAR _TitleGood    = "<div style='display:flex; align-items:center;'>Wysoka regularność sprzedaży"    & _IconGood    & "</div>"
+			VAR _TitleNeutral = "<div style='display:flex; align-items:center;'>Standardowa dynamika sprzedaży" & _IconNeutral & "</div>"
+			VAR _TitleAlert   = "<div style='display:flex; align-items:center;'>Wysoka nieregularność sprzedaży" & _IconAlert  & "</div>"
+			VAR _TitleBlank   = "<div style='display:flex; align-items:center;'>Brak danych o zmienności</div>"
+			
+			RETURN
+			IF(
+			    NOT(ISBLANK(_Sales)),
+			    SWITCH(
+			        TRUE(),
+			        ISBLANK(_CV),   _TitleBlank,
+			        _CV <= 0.20,    _TitleGood,
+			        _CV <= 0.40,    _TitleNeutral,
+			        _TitleAlert
+			    )
+			)
+		lineageTag: e1808117-d4e5-49f6-aa57-b1280cd64d4d
+
+	measure Trend_Wizyt_6M_Pct =
+			
+			   			-- Indeks sekwencyjny: sty 2024 = 1, lut 2024 = 2, ...
+			   			VAR _AllMonths =
+			   			    CALCULATETABLE(
+			   			        ADDCOLUMNS(
+			   			            VALUES(DimDate[MonthYear]),
+			   			            "@SeqX", CALCULATE(MAXX(DimDate, (DimDate[Year] - 2024) * 12 + DimDate[Month]))
+			   			        ),
+			   			        REMOVEFILTERS(DimDate)
+			   			    )
+						   			-- Ostatni miesiąc z danymi
+			   			VAR _MonthsWithData = FILTER(_AllMonths, CALCULATE([Net Sales]) > 0)
+			   			VAR _AnchorMonth    = MAXX(_MonthsWithData, [@SeqX])
+						   			-- Okno 6-miesięczne
+			   			VAR _TrendTable =
+			   			    CALCULATETABLE(
+			   			        ADDCOLUMNS(
+			   			            VALUES(DimDate[MonthYear]),
+			   			            "@X", CALCULATE(MAXX(DimDate, (DimDate[Year] - 2024) * 12 + DimDate[Month])),
+			   			            "@Y", [Net Sales]
+			   			        ),
+			   			        REMOVEFILTERS(DimDate),
+			   			        FILTER(_AllMonths, [@SeqX] >= _AnchorMonth - 5 && [@SeqX] <= _AnchorMonth)
+			   			    )
+						   			VAR _TrendData = FILTER(_TrendTable, NOT(ISBLANK([@Y])) && [@Y] > 0)
+			   			VAR _N         = COUNTROWS(_TrendData)
+			   			VAR _SumX      = SUMX(_TrendData, [@X])
+			   			VAR _SumY      = SUMX(_TrendData, [@Y])
+			   			VAR _SumXY     = SUMX(_TrendData, [@X] * [@Y])
+			   			VAR _SumX2     = SUMX(_TrendData, [@X] * [@X])
+			   			VAR _AvgY      = DIVIDE(_SumY, _N)
+			   			VAR _Slope     = DIVIDE(_N * _SumXY - _SumX * _SumY, _N * _SumX2 - _SumX * _SumX)
+			   			VAR _SlopeNorm = DIVIDE(_Slope, _AvgY)
+						   			RETURN
+			   			IF(_N >= 4, _SlopeNorm, BLANK())
+		formatString: 0.00%;-0.00%;0.00%
+		displayFolder: Kilometrówka
+		lineageTag: 4c3635a1-1d99-4e3c-8f32-2fd4b772e8ab
+
+	measure 'Visits KPI Dashboard Subtitle' = ```
+			
+			VAR _CV = [Sales KPI Deviation]
+			VAR _Wizyty = [Net Sales]
+			VAR _Trend = [Trend_Wizyt_6M_Pct]
+			VAR _CvDesc = 
+			    SWITCH(
+			        TRUE(),
+			        ISBLANK(_CV), "Zbyt mały zakres pełnych m-cy do obliczeń",
+			        _CV <= 0.20, "Zmienność w normie (stabilne obciążenie m/m)",
+			        _CV <= 0.40, "Naturalna dynamika (umiarkowane odchylenia m/m)",
+			        "Niestabilne tempo (praca 'zrywami' m/m)"
+			    )
+			VAR _TrendDesc = 
+			    SWITCH(
+			        TRUE(),
+			        ISBLANK(_Trend), "",
+			        _Trend >= 0.10, " i silny trend rosnący",
+			        _Trend >= 0.05, " i wyraźny trend rosnący",
+			        _Trend >= 0.02, " i łagodny trend rosnący",
+			        _Trend <= -0.10, " oraz silny zjazd aktywności",
+			        _Trend <= -0.05, " oraz wyraźny trend spadkowy",
+			        _Trend <= -0.02, " oraz łagodny trend spadkowy",
+			        " i stabilna aktywność"
+			    )
+			RETURN
+			IF(
+			    NOT(ISBLANK(_Wizyty)),
+			    IF(
+			        ISBLANK(_CV),
+			        _CvDesc,
+			        _CvDesc & _TrendDesc
+			    )
+			)
+			```
+		displayFolder: Kilometrówka
+		lineageTag: f3dd515c-beab-4a6c-8bcc-8ecde87b2177
+
+	measure 'KPI Card Product Cost Overall IMG' =
+			
+			// ── Sub1: zmiana vs poprzedni miesiąc ─────────────────────────────────────
+			VAR _prev      = [Net Sales]
+			VAR _momRaw    = [Net Sales PY]
+			VAR _hasMoM    = NOT ISBLANK(_prev) && _prev <> 0
+			VAR _momArrow  = IF(_momRaw >= 0, "▲ +", "▼ ")
+			VAR _sub1Val   = IF(_hasMoM, _momArrow & FORMAT(ABS(_momRaw) * 100, "0.0") & "%", "—")
+			VAR _sub1Color = IF(_momRaw >= 0, "#E74C3C", "#27AE60")
+			
+			// ── Sub2: produkt z największym wzrostem kosztu ────────────────────────────
+			VAR _produkty  = VALUES(DimRep[RepName])
+			VAR _zDiff     =
+			    ADDCOLUMNS(
+			        _produkty,
+			        "@diff", CALCULATE([Net Sales vs Peer %]),
+			        "@prev", CALCULATE([Net Sales vs Peer Text])
+			    )
+			VAR _top1      = TOPN(1, FILTER(_zDiff, [@diff] > 0), [@diff], DESC)
+			VAR _topName   = MAXX(_top1, [Top Dealer Footer])
+			VAR _topDiff   = MAXX(_top1, [@diff])
+			VAR _topPrev   = MAXX(_top1, [@prev])
+			VAR _topPct    = DIVIDE(_topDiff, ABS(_topPrev)) * 100
+			VAR _sub2Val   =
+			    IF(
+			        NOT ISBLANK(_topName),
+			        _topName & " (+" & FORMAT(_topPct, "0.0") & "%)",
+			        "brak wzrostow"
+			    )
+			
+			RETURN
+			KPI_SVG_TwoSubs(
+			    "Koszt total",                                                                          -- 1. _TitleTxt
+			    [Net Sales],                                                                 -- 2. _ValueKPI
+			    "zl",                                                                                   -- 3. _SuffixTxt
+			    "M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",                        -- 4. _IconPathD
+			    "#FFFFFF",          -- 5. background color
+			    "#0A1E41",          -- 6. dark text (title, value)
+			    "#5F6B7C",          -- 7. grey text (labels)
+			    "#6A1B9A",                                                                              -- 8. _Accent
+			    "#E5E7EB",                                                                              -- 9. _BorderColor
+			    "vs poprz. miesiac",                                                                    -- 10. _Sub1LabelTxt
+			    _sub1Val,                                                                               -- 11. _Sub1ValueTxt
+			    _sub1Color,                                                                             -- 12. _Sub1ColorTxt
+			    "Najwiekszy wzrost:",                                                                   -- 13. _Sub2LabelTxt
+			    _sub2Val,                                                                               -- 14. _Sub2ValueTxt
+			    "#6A1B9A"                                                                               -- 15. _Sub2ColorTxt
+			)
+		lineageTag: b17e4cf9-90b7-4681-8a25-07ceb6c371ff
+
+	measure 'KPI Card Product Cost Overall IMG 2' =
+			
+			// ── Sub1: zmiana vs poprzedni miesiąc ─────────────────────────────────────
+			VAR _prev      = 5656
+			VAR _momRaw    = 65676
+			VAR _hasMoM    = NOT ISBLANK(_prev) && _prev <> 0
+			VAR _momArrow  = IF(_momRaw >= 0, "▲ +", "▼ ")
+			VAR _sub1Val   = IF(_hasMoM, _momArrow & FORMAT(ABS(_momRaw) * 100, "0.0") & "%", "—")
+			VAR _sub1Color = IF(_momRaw >= 0, "#E74C3C", "#27AE60")
+			
+			// ── Sub2: produkt z największym wzrostem kosztu ────────────────────────────
+			VAR _produkty  = VALUES(DimRep[RepName])
+			VAR _zDiff     =
+			    ADDCOLUMNS(
+			        _produkty,
+			        "@diff", CALCULATE(500),
+			        "@prev", CALCULATE(800)
+			    )
+			VAR _top1      = TOPN(1, FILTER(_zDiff, [@diff] > 0), [@diff], DESC)
+			VAR _topName   = "caldera"
+			VAR _topDiff   = "diff"
+			VAR _topPrev   = "what what"
+			VAR _topPct    = "23"
+			VAR _sub2Val   =
+			    IF(
+			        NOT ISBLANK(_topName),
+			        _topName & " (+" & FORMAT(_topPct, "0.0") & "%)",
+			        "brak wzrostow"
+			    )
+			
+			RETURN
+			KPI_SVG_TwoSubs(
+			    "Koszt total",                                                                          -- 1. _TitleTxt
+			    [Net Sales],                                                                 -- 2. _ValueKPI
+			    "zl",                                                                                   -- 3. _SuffixTxt
+			    "M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",                        -- 4. _IconPathD
+			    "#FFFFFF",          -- 5. background color
+			    "#0A1E41",          -- 6. dark text (title, value)
+			    "#5F6B7C",          -- 7. grey text (labels)
+			    "#6A1B9A",                                                                              -- 8. _Accent
+			    "#E5E7EB",                                                                              -- 9. _BorderColor
+			    "vs poprz. miesiac",                                                                    -- 10. _Sub1LabelTxt
+			    _sub1Val,                                                                               -- 11. _Sub1ValueTxt
+			    _sub1Color,                                                                             -- 12. _Sub1ColorTxt
+			    "Najwiekszy wzrost:",                                                                   -- 13. _Sub2LabelTxt
+			    _sub2Val,                                                                               -- 14. _Sub2ValueTxt
+			    "#6A1B9A"                                                                               -- 15. _Sub2ColorTxt
+			)
+		lineageTag: 754182e0-394e-45cd-9160-387cc7abacae
+		dataCategory: ImageUrl
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure Wizualizacja_SVG = ```
+			
+			VAR KodSVG = 
+			"<svg width='1280' height='720' viewBox='0 0 1280 720' fill='none' xmlns='http://www.w3.org/2000/svg'>
+			<g clip-path='url(#clip0_91_84)'>
+			<path d='M0 53.3333C0 23.8781 23.8781 0 53.3333 0H186.915C216.37 0 240.248 23.8781 240.248 53.3333V666.667C240.248 696.122 216.37 720 186.915 720H53.3334C23.8782 720 0 696.122 0 666.667V53.3333Z' fill='url(#paint0_radial_91_84)'/>
+			<g filter='url(#filter0_d_91_84)'>
+			<path d='M174.726 40C174.726 17.9086 192.635 0 214.726 0H1273.33C1277.02 0 1280 2.98477 1280 6.66667V713.333C1280 717.015 1277.02 720 1273.33 720H214.726C192.635 720 174.726 702.091 174.726 680V40Z' fill='url(#paint1_linear_91_84)'/>
+			<path d='M214.726 0.333008H1273.33C1276.83 0.333008 1279.67 3.16918 1279.67 6.66699V713.333C1279.67 716.831 1276.83 719.667 1273.33 719.667H214.726C192.819 719.667 175.059 701.907 175.059 680V40C175.059 18.0927 192.819 0.333008 214.726 0.333008Z' stroke='#FAFAF9' stroke-width='0.666667'/>
+			</g>
+			<path d='M0 53.3333C0 23.8781 23.8781 0 53.3333 0H186.915C216.37 0 240.248 23.8781 240.248 53.3333V666.667C240.248 696.122 216.37 720 186.915 720H53.3334C23.8782 720 0 696.122 0 666.667V53.3333Z' fill='url(#paint2_radial_91_84)'/>
+			<g filter='url(#filter1_d_91_84)'>
+			<path d='M174.726 40C174.726 17.9086 192.635 0 214.726 0H1273.33C1277.02 0 1280 2.98477 1280 6.66667V713.333C1280 717.015 1277.02 720 1273.33 720H214.726C192.635 720 174.726 702.091 174.726 680V40Z' fill='url(#paint3_linear_91_84)'/>
+			<path d='M214.726 0.333008H1273.33C1276.83 0.333008 1279.67 3.16918 1279.67 6.66699V713.333C1279.67 716.831 1276.83 719.667 1273.33 719.667H214.726C192.819 719.667 175.059 701.907 175.059 680V40C175.059 18.0927 192.819 0.333008 214.726 0.333008Z' stroke='#FAFAF9' stroke-width='0.666667'/>
+			</g>
+			<g clip-path='url(#clip1_91_84)'>
+			<path opacity='0.1' d='M28.0274 56.1318C28.6676 56.1318 29.1866 55.5838 29.1866 54.9077C29.1866 54.2316 28.6676 53.6836 28.0274 53.6836C27.3872 53.6836 26.8682 54.2316 26.8682 54.9077C26.8682 55.5838 27.3872 56.1318 28.0274 56.1318Z' fill='white'/>
+			<path opacity='0.12' d='M36.7214 59.1919C37.3616 59.1919 37.8806 58.6438 37.8806 57.9678C37.8806 57.2917 37.3616 56.7437 36.7214 56.7437C36.0812 56.7437 35.5622 57.2917 35.5622 57.9678C35.5622 58.6438 36.0812 59.1919 36.7214 59.1919Z' fill='white'/>
+			<path opacity='0.15' d='M30.9254 68.373C31.5656 68.373 32.0846 67.825 32.0846 67.1489C32.0846 66.4729 31.5656 65.9248 30.9254 65.9248C30.2852 65.9248 29.7662 66.4729 29.7662 67.1489C29.7662 67.825 30.2852 68.373 30.9254 68.373Z' fill='white'/>
+			<path opacity='0.08' d='M39.6194 71.4336C40.2596 71.4336 40.7786 70.8855 40.7786 70.2095C40.7786 69.5334 40.2596 68.9854 39.6194 68.9854C38.9792 68.9854 38.4602 69.5334 38.4602 70.2095C38.4602 70.8855 38.9792 71.4336 39.6194 71.4336Z' fill='white'/>
+			<path opacity='0.1' d='M48.3134 62.2524C48.9537 62.2524 49.4726 61.7044 49.4726 61.0283C49.4726 60.3522 48.9537 59.8042 48.3134 59.8042C47.6732 59.8042 47.1542 60.3522 47.1542 61.0283C47.1542 61.7044 47.6732 62.2524 48.3134 62.2524Z' fill='white'/>
+			<path opacity='0.1' d='M54.1094 74.4931C54.7496 74.4931 55.2686 73.9451 55.2686 73.269C55.2686 72.593 54.7496 72.0449 54.1094 72.0449C53.4692 72.0449 52.9502 72.593 52.9502 73.269C52.9502 73.9451 53.4692 74.4931 54.1094 74.4931Z' fill='white'/>
+			<path opacity='0.1' d='M152.642 56.1318C153.282 56.1318 153.801 55.5838 153.801 54.9077C153.801 54.2316 153.282 53.6836 152.642 53.6836C152.002 53.6836 151.483 54.2316 151.483 54.9077C151.483 55.5838 152.002 56.1318 152.642 56.1318Z' fill='white'/>
+			<path opacity='0.1' d='M161.336 59.1919C161.976 59.1919 162.495 58.6438 162.495 57.9678C162.495 57.2917 161.976 56.7437 161.336 56.7437C160.696 56.7437 160.177 57.2917 160.177 57.9678C160.177 58.6438 160.696 59.1919 161.336 59.1919Z' fill='white'/>
+			<path opacity='0.1' d='M167.132 68.373C167.772 68.373 168.291 67.825 168.291 67.1489C168.291 66.4729 167.772 65.9248 167.132 65.9248C166.492 65.9248 165.973 66.4729 165.973 67.1489C165.973 67.825 166.492 68.373 167.132 68.373Z' fill='white'/>
+			<path opacity='0.1' d='M158.438 71.4336C159.078 71.4336 159.597 70.8855 159.597 70.2095C159.597 69.5334 159.078 68.9854 158.438 68.9854C157.798 68.9854 157.279 69.5334 157.279 70.2095C157.279 70.8855 157.798 71.4336 158.438 71.4336Z' fill='white'/>
+			<path opacity='0.1' d='M170.03 80.6142C170.67 80.6142 171.189 80.0662 171.189 79.3901C171.189 78.7141 170.67 78.166 170.03 78.166C169.39 78.166 168.871 78.7141 168.871 79.3901C168.871 80.0662 169.39 80.6142 170.03 80.6142Z' fill='white'/>
+			<path opacity='0.1' d='M28.0274 460.087C28.6676 460.087 29.1866 459.539 29.1866 458.863C29.1866 458.187 28.6676 457.639 28.0274 457.639C27.3872 457.639 26.8682 458.187 26.8682 458.863C26.8682 459.539 27.3872 460.087 28.0274 460.087Z' fill='white'/>
+			<path opacity='0.1' d='M36.7214 463.146C37.3616 463.146 37.8806 462.598 37.8806 461.922C37.8806 461.246 37.3616 460.698 36.7214 460.698C36.0812 460.698 35.5622 461.246 35.5622 461.922C35.5622 462.598 36.0812 463.146 36.7214 463.146Z' fill='white'/>
+			<path opacity='0.1' d='M30.9254 469.268C31.5656 469.268 32.0846 468.719 32.0846 468.043C32.0846 467.367 31.5656 466.819 30.9254 466.819C30.2852 466.819 29.7662 467.367 29.7662 468.043C29.7662 468.719 30.2852 469.268 30.9254 469.268Z' fill='white'/>
+			<path opacity='0.1' d='M39.6194 472.328C40.2596 472.328 40.7786 471.78 40.7786 471.104C40.7786 470.428 40.2596 469.88 39.6194 469.88C38.9792 469.88 38.4602 470.428 38.4602 471.104C38.4602 471.78 38.9792 472.328 39.6194 472.328Z' fill='white'/>
+			<path opacity='0.08' d='M152.642 466.207C153.282 466.207 153.801 465.659 153.801 464.983C153.801 464.307 153.282 463.759 152.642 463.759C152.002 463.759 151.483 464.307 151.483 464.983C151.483 465.659 152.002 466.207 152.642 466.207Z' fill='white'/>
+			<path opacity='0.08' d='M164.234 472.328C164.874 472.328 165.393 471.78 165.393 471.104C165.393 470.428 164.874 469.88 164.234 469.88C163.594 469.88 163.075 470.428 163.075 471.104C163.075 471.78 163.594 472.328 164.234 472.328Z' fill='white'/>
+			<path opacity='0.08' d='M54.1095 140.595L77.2936 165.077' stroke='white'/>
+			<path opacity='0.08' d='M123.662 226.282L152.642 256.885' stroke='white' stroke-width='0.8'/>
+			<path opacity='0.08' d='M42.5174 348.692H77.2935' stroke='white'/>
+			<path opacity='0.06' d='M106.274 397.657V434.38' stroke='white'/>
+			<path opacity='0.2' d='M26.373 213.601C26.7627 213.601 27.0787 213.031 27.0787 212.328C27.0787 211.625 26.7627 211.055 26.373 211.055C25.9832 211.055 25.6672 211.625 25.6672 212.328C25.6672 213.031 25.9832 213.601 26.373 213.601Z' fill='white'/>
+			<path opacity='0.1' d='M139.291 226.969C139.876 226.969 140.35 226.114 140.35 225.059C140.35 224.004 139.876 223.149 139.291 223.149C138.706 223.149 138.233 224.004 138.233 225.059C138.233 226.114 138.706 226.969 139.291 226.969Z' fill='white'/>
+			<path opacity='0.2' d='M86.3607 289.666C86.6531 289.666 86.89 289.239 86.89 288.712C86.89 288.184 86.6531 287.757 86.3607 287.757C86.0684 287.757 85.8314 288.184 85.8314 288.712C85.8314 289.239 86.0684 289.666 86.3607 289.666Z' fill='white'/>
+			<path opacity='0.15' d='M51.0738 245.746C51.561 245.746 51.956 245.034 51.956 244.155C51.956 243.276 51.561 242.563 51.0738 242.563C50.5866 242.563 50.1917 243.276 50.1917 244.155C50.1917 245.034 50.5866 245.746 51.0738 245.746Z' fill='white'/>
+			<path opacity='0.1' d='M128.705 302.716C129.095 302.716 129.411 302.146 129.411 301.443C129.411 300.74 129.095 300.17 128.705 300.17C128.315 300.17 127.999 300.74 127.999 301.443C127.999 302.146 128.315 302.716 128.705 302.716Z' fill='white'/>
+			<path opacity='0.1' d='M36.959 307.808H65.1886' stroke='white' stroke-width='1.33333'/>
+			<path opacity='0.15' d='M121.648 218.693H149.877' stroke='white'/>
+			<path opacity='0.1' d='M104.004 256.886V295.078' stroke='white' stroke-width='1.33333'/>
+			<path opacity='0.1' d='M44.0164 205.962L58.1312 231.423' stroke='white'/>
+			<path opacity='0.1' d='M75.7747 225.059H93.4181' stroke='white' stroke-width='0.666667'/>
+			</g>
+			</g>
+			<defs>
+			<filter id='filter0_d_91_84' x='144.726' y='-26.6667' width='1158.61' height='773.333' filterUnits='userSpaceOnUse' color-interpolation-filters='sRGB'>
+			<feFlood flood-opacity='0' result='BackgroundImageFix'/>
+			<feColorMatrix in='SourceAlpha' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0' result='hardAlpha'/>
+			<feOffset dx='-3.33333'/>
+			<feGaussianBlur stdDeviation='13.3333'/>
+			<feComposite in2='hardAlpha' operator='out'/>
+			<feColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0'/>
+			<feBlend mode='normal' in2='BackgroundImageFix' result='effect1_dropShadow_91_84'/>
+			<feBlend mode='normal' in='SourceGraphic' in2='effect1_dropShadow_91_84' result='shape'/>
+			</filter>
+			<filter id='filter1_d_91_84' x='144.726' y='-26.6667' width='1158.61' height='773.333' filterUnits='userSpaceOnUse' color-interpolation-filters='sRGB'>
+			<feFlood flood-opacity='0' result='BackgroundImageFix'/>
+			<feColorMatrix in='SourceAlpha' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0' result='hardAlpha'/>
+			<feOffset dx='-3.33333'/>
+			<feGaussianBlur stdDeviation='13.3333'/>
+			<feComposite in2='hardAlpha' operator='out'/>
+			<feColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0'/>
+			<feBlend mode='normal' in2='BackgroundImageFix' result='effect1_dropShadow_91_84'/>
+			<feBlend mode='normal' in='SourceGraphic' in2='effect1_dropShadow_91_84' result='shape'/>
+			</filter>
+			<radialGradient id='paint0_radial_91_84' cx='0' cy='0' r='1' gradientTransform='matrix(257.196 -244.387 170.24 409.015 -75.1189 677)' gradientUnits='userSpaceOnUse'>
+			<stop stop-color='#99F1DC'/>
+			<stop offset='1' stop-color='#8CE19E'/>
+			</radialGradient>
+			<linearGradient id='paint1_linear_91_84' x1='174.726' y1='361.202' x2='1280' y2='358.513' gradientUnits='userSpaceOnUse'>
+			<stop offset='0.125' stop-color='#FAFAF9'/>
+			<stop offset='0.77' stop-color='#FAFAF9'/>
+			</linearGradient>
+			<radialGradient id='paint2_radial_91_84' cx='0' cy='0' r='1' gradientTransform='matrix(257.196 -244.387 170.24 409.015 -75.1189 677)' gradientUnits='userSpaceOnUse'>
+			<stop stop-color='#71C4EF'/>
+			<stop offset='1' stop-color='#00668C'/>
+			</radialGradient>
+			<linearGradient id='paint3_linear_91_84' x1='174.726' y1='361.202' x2='1280' y2='358.513' gradientUnits='userSpaceOnUse'>
+			<stop offset='0.125' stop-color='#FAFAF9'/>
+			<stop offset='0.77' stop-color='#FAFAF9'/>
+			</linearGradient>
+			<clipPath id='clip0_91_84'>
+			<rect width='1280' height='720' fill='white'/>
+			</clipPath>
+			<clipPath id='clip1_91_84'>
+			<rect width='155.333' height='433.333' fill='white' transform='translate(19.3333 42.6665)'/>
+			</clipPath>
+			</defs>
+			</svg>
+			
+			"
+			VAR _svg2 = 
+			"<svg width='1920' height='1080' viewBox='0 0 1920 1080' fill='none' xmlns='http://www.w3.org/2000/svg'>
+			<g clip-path='url(#clip0_87_42)'>
+			<path d='M0 80C0 35.8172 35.8172 0 80 0H280.372C324.555 0 360.372 35.8172 360.372 80V1000C360.372 1044.18 324.555 1080 280.372 1080H80.0001C35.8173 1080 0 1044.18 0 1000V80Z' fill='url(#paint0_radial_87_42)'/>
+			<g filter='url(#filter0_d_87_42)'>
+			<path d='M262.089 60C262.089 26.8629 288.952 0 322.089 0H1910C1915.52 0 1920 4.47715 1920 10V1070C1920 1075.52 1915.52 1080 1910 1080H322.089C288.952 1080 262.089 1053.14 262.089 1020V60Z' fill='url(#paint1_linear_87_42)'/>
+			<path d='M322.089 0.5H1910C1915.25 0.500071 1919.5 4.75334 1919.5 10V1070C1919.5 1075.25 1915.25 1079.5 1910 1079.5H322.089C289.228 1079.5 262.589 1052.86 262.589 1020V60C262.589 27.1391 289.228 0.500001 322.089 0.5Z' stroke='#F9F9F9'/>
+			</g>
+			<g clip-path='url(#clip1_87_42)'>
+			<path opacity='0.1' d='M42.0411 84.1977C43.0014 84.1977 43.7799 83.3756 43.7799 82.3615C43.7799 81.3475 43.0014 80.5254 42.0411 80.5254C41.0807 80.5254 40.3022 81.3475 40.3022 82.3615C40.3022 83.3756 41.0807 84.1977 42.0411 84.1977Z' fill='white'/>
+			<path opacity='0.12' d='M55.0821 88.788C56.0424 88.788 56.8209 87.966 56.8209 86.9519C56.8209 85.9378 56.0424 85.1157 55.0821 85.1157C54.1218 85.1157 53.3433 85.9378 53.3433 86.9519C53.3433 87.966 54.1218 88.788 55.0821 88.788Z' fill='white'/>
+			<path opacity='0.15' d='M46.3881 102.56C47.3484 102.56 48.1269 101.737 48.1269 100.723C48.1269 99.7093 47.3484 98.8872 46.3881 98.8872C45.4278 98.8872 44.6493 99.7093 44.6493 100.723C44.6493 101.737 45.4278 102.56 46.3881 102.56Z' fill='white'/>
+			<path opacity='0.08' d='M59.4291 107.15C60.3894 107.15 61.1679 106.328 61.1679 105.314C61.1679 104.3 60.3894 103.478 59.4291 103.478C58.4688 103.478 57.6903 104.3 57.6903 105.314C57.6903 106.328 58.4688 107.15 59.4291 107.15Z' fill='white'/>
+			<path opacity='0.1' d='M72.4701 93.3784C73.4304 93.3784 74.2089 92.5563 74.2089 91.5422C74.2089 90.5281 73.4304 89.7061 72.4701 89.7061C71.5098 89.7061 70.7313 90.5281 70.7313 91.5422C70.7313 92.5563 71.5098 93.3784 72.4701 93.3784Z' fill='white'/>
+			<path opacity='0.1' d='M81.1642 111.74C82.1245 111.74 82.903 110.918 82.903 109.904C82.903 108.89 82.1245 108.068 81.1642 108.068C80.2039 108.068 79.4254 108.89 79.4254 109.904C79.4254 110.918 80.2039 111.74 81.1642 111.74Z' fill='white'/>
+			<path opacity='0.1' d='M228.963 84.1977C229.923 84.1977 230.701 83.3756 230.701 82.3615C230.701 81.3475 229.923 80.5254 228.963 80.5254C228.002 80.5254 227.224 81.3475 227.224 82.3615C227.224 83.3756 228.002 84.1977 228.963 84.1977Z' fill='white'/>
+			<path opacity='0.1' d='M242.004 88.788C242.964 88.788 243.743 87.966 243.743 86.9519C243.743 85.9378 242.964 85.1157 242.004 85.1157C241.043 85.1157 240.265 85.9378 240.265 86.9519C240.265 87.966 241.043 88.788 242.004 88.788Z' fill='white'/>
+			<path opacity='0.1' d='M250.698 102.56C251.658 102.56 252.437 101.737 252.437 100.723C252.437 99.7093 251.658 98.8872 250.698 98.8872C249.737 98.8872 248.959 99.7093 248.959 100.723C248.959 101.737 249.737 102.56 250.698 102.56Z' fill='white'/>
+			<path opacity='0.1' d='M237.657 107.15C238.617 107.15 239.396 106.328 239.396 105.314C239.396 104.3 238.617 103.478 237.657 103.478C236.696 103.478 235.918 104.3 235.918 105.314C235.918 106.328 236.696 107.15 237.657 107.15Z' fill='white'/>
+			<path opacity='0.1' d='M255.045 120.921C256.005 120.921 256.784 120.099 256.784 119.085C256.784 118.071 256.005 117.249 255.045 117.249C254.084 117.249 253.306 118.071 253.306 119.085C253.306 120.099 254.084 120.921 255.045 120.921Z' fill='white'/>
+			<path opacity='0.1' d='M42.0411 690.13C43.0014 690.13 43.7799 689.308 43.7799 688.294C43.7799 687.28 43.0014 686.458 42.0411 686.458C41.0807 686.458 40.3022 687.28 40.3022 688.294C40.3022 689.308 41.0807 690.13 42.0411 690.13Z' fill='white'/>
+			<path opacity='0.1' d='M55.0821 694.72C56.0424 694.72 56.8209 693.898 56.8209 692.884C56.8209 691.87 56.0424 691.048 55.0821 691.048C54.1218 691.048 53.3433 691.87 53.3433 692.884C53.3433 693.898 54.1218 694.72 55.0821 694.72Z' fill='white'/>
+			<path opacity='0.1' d='M46.3881 703.901C47.3484 703.901 48.1269 703.079 48.1269 702.065C48.1269 701.051 47.3484 700.229 46.3881 700.229C45.4278 700.229 44.6493 701.051 44.6493 702.065C44.6493 703.079 45.4278 703.901 46.3881 703.901Z' fill='white'/>
+			<path opacity='0.1' d='M59.4291 708.492C60.3894 708.492 61.1679 707.67 61.1679 706.655C61.1679 705.641 60.3894 704.819 59.4291 704.819C58.4688 704.819 57.6903 705.641 57.6903 706.655C57.6903 707.67 58.4688 708.492 59.4291 708.492Z' fill='white'/>
+			<path opacity='0.08' d='M228.963 699.311C229.923 699.311 230.701 698.489 230.701 697.475C230.701 696.461 229.923 695.639 228.963 695.639C228.002 695.639 227.224 696.461 227.224 697.475C227.224 698.489 228.002 699.311 228.963 699.311Z' fill='white'/>
+			<path opacity='0.08' d='M246.351 708.492C247.311 708.492 248.09 707.67 248.09 706.655C248.09 705.641 247.311 704.819 246.351 704.819C245.39 704.819 244.612 705.641 244.612 706.655C244.612 707.67 245.39 708.492 246.351 708.492Z' fill='white'/>
+			<path opacity='0.08' d='M81.1642 210.893L115.94 247.616' stroke='white' stroke-width='1.5'/>
+			<path opacity='0.08' d='M185.493 339.424L228.963 385.328' stroke='white' stroke-width='1.2'/>
+			<path opacity='0.08' d='M63.7761 523.04H115.94' stroke='white' stroke-width='1.5'/>
+			<path opacity='0.06' d='M159.41 596.486V651.571' stroke='white' stroke-width='1.5'/>
+			<path opacity='0.2' d='M39.5596 320.401C40.1442 320.401 40.6182 319.546 40.6182 318.492C40.6182 317.437 40.1442 316.582 39.5596 316.582C38.9749 316.582 38.501 317.437 38.501 318.492C38.501 319.546 38.9749 320.401 39.5596 320.401Z' fill='white'/>
+			<path opacity='0.1' d='M208.937 340.452C209.814 340.452 210.525 339.17 210.525 337.588C210.525 336.006 209.814 334.723 208.937 334.723C208.06 334.723 207.349 336.006 207.349 337.588C207.349 339.17 208.06 340.452 208.937 340.452Z' fill='white'/>
+			<path opacity='0.2' d='M129.541 434.5C129.98 434.5 130.335 433.859 130.335 433.068C130.335 432.277 129.98 431.636 129.541 431.636C129.103 431.636 128.747 432.277 128.747 433.068C128.747 433.859 129.103 434.5 129.541 434.5Z' fill='white'/>
+			<path opacity='0.15' d='M76.6107 368.619C77.3416 368.619 77.934 367.55 77.934 366.232C77.934 364.913 77.3416 363.845 76.6107 363.845C75.8799 363.845 75.2875 364.913 75.2875 366.232C75.2875 367.55 75.8799 368.619 76.6107 368.619Z' fill='white'/>
+			<path opacity='0.1' d='M193.058 454.074C193.642 454.074 194.116 453.219 194.116 452.164C194.116 451.109 193.642 450.254 193.058 450.254C192.473 450.254 191.999 451.109 191.999 452.164C191.999 453.219 192.473 454.074 193.058 454.074Z' fill='white'/>
+			<path opacity='0.1' d='M55.4386 461.712H97.7829' stroke='white' stroke-width='2'/>
+			<path opacity='0.15' d='M182.472 328.04H224.816' stroke='white' stroke-width='1.5'/>
+			<path opacity='0.1' d='M156.006 385.328V442.616' stroke='white' stroke-width='2'/>
+			<path opacity='0.1' d='M66.0247 308.944L87.1968 347.136' stroke='white' stroke-width='1.5'/>
+			<path opacity='0.1' d='M113.662 337.588H140.127' stroke='white'/>
+			</g>
+			</g>
+			<defs>
+			<filter id='filter0_d_87_42' x='217.089' y='-40' width='1737.91' height='1160' filterUnits='userSpaceOnUse' color-interpolation-filters='sRGB'>
+			<feFlood flood-opacity='0' result='BackgroundImageFix'/>
+			<feColorMatrix in='SourceAlpha' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0' result='hardAlpha'/>
+			<feOffset dx='-5'/>
+			<feGaussianBlur stdDeviation='20'/>
+			<feComposite in2='hardAlpha' operator='out'/>
+			<feColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0'/>
+			<feBlend mode='normal' in2='BackgroundImageFix' result='effect1_dropShadow_87_42'/>
+			<feBlend mode='normal' in='SourceGraphic' in2='effect1_dropShadow_87_42' result='shape'/>
+			</filter>
+			<radialGradient id='paint0_radial_87_42' cx='0' cy='0' r='1' gradientTransform='matrix(385.794 -366.581 255.359 613.522 -112.678 1015.5)' gradientUnits='userSpaceOnUse'>
+			<stop stop-color='#F19999'/>
+			<stop offset='1' stop-color='#8CE19E'/>
+			</radialGradient>
+			<linearGradient id='paint1_linear_87_42' x1='262.089' y1='541.803' x2='1920' y2='537.769' gradientUnits='userSpaceOnUse'>
+			<stop offset='0.125' stop-color='#FAFAF9'/>
+			<stop offset='0.77' stop-color='#FAFAF9'/>
+			</linearGradient>
+			<clipPath id='clip0_87_42'>
+			<rect width='1920' height='1080' fill='white'/>
+			</clipPath>
+			<clipPath id='clip1_87_42'>
+			<rect width='233' height='650' fill='white' transform='translate(29 64)'/>
+			</clipPath>
+			</defs>
+			</svg>
+			
+			
+			"
+			RETURN
+			"data:image/svg+xml;utf8," & 
+			SWITCH(
+			    SELECTEDVALUE('Parameter: Theme'[Value4]),
+			    1, KodSVG,
+			    2, _svg2,
+			    KodSVG
+			)
+			```
+		lineageTag: 18e63d8d-e303-4121-92c2-e47d91e5ffb1
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'KPI Card Net Sales IMG' =
+			
+			VAR _curr     = [Net Sales]
+			VAR _prev     = CALCULATE([Net Sales], SAMEPERIODLASTYEAR(DimDate[Date]))
+			VAR _hasPY    = NOT ISBLANK(_prev) && _prev <> 0
+			VAR _yoy      = DIVIDE(_curr - _prev, ABS(_prev))
+			VAR _yoyArrow = IF(_yoy >= 0, "▲ +", "▼ ")
+			VAR _sub1Val  = IF(_hasPY, _yoyArrow & FORMAT(ABS(_yoy) * 100, "0.0", "en-US") & "%", "—")
+			VAR _sub1Clr  = IF(_yoy >= 0, "#b1e0b5", "#d0f7e0")
+			VAR _repData  = ADDCOLUMNS(FILTER(ALL(DimRep), DimRep[RepKey] <> -1), "@s", CALCULATE([Net Sales]))
+			VAR _top1     = TOPN(1, _repData, [@s], DESC)
+			VAR _repName  = MAXX(_top1, DimRep[RepName])
+			VAR _repSales = MAXX(_top1, [@s])
+			VAR _sub2Val  = IF(NOT ISBLANK(_repName), _repName & " (" & FORMAT(_repSales, "$#,0", "en-US") & ")", "—")
+			RETURN
+			    KPI_SVG_TwoSubs(
+			        "Net Sales",
+			        _curr,
+			        "$",
+			        "M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
+			        "#006084",
+			        "#FFFFFF",
+			        "#FFFFFF",
+			        "#c8e8f7",
+			        "#c8e8f7",
+			        "vs Prior Year",
+			        _sub1Val,
+			        _sub1Clr,
+			        "Top rep:",
+			        _sub2Val,
+			        "#c8e8f7",
+			        "#004b69"
+			    )
+		formatString: General
+		displayFolder: KPI Cards
+		lineageTag: 1a2b3c4d-5e6f-7890-abcd-111111111111
+		dataCategory: ImageUrl
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'KPI Card Orders IMG' =
+			
+			VAR _curr     = [# Orders]
+			VAR _prev     = CALCULATE([# Orders], SAMEPERIODLASTYEAR(DimDate[Date]))
+			VAR _hasPY    = NOT ISBLANK(_prev) && _prev <> 0
+			VAR _yoy      = DIVIDE(_curr - _prev, ABS(_prev))
+			VAR _yoyArrow = IF(_yoy >= 0, "▲ +", "▼ ")
+			VAR _sub1Val  = IF(_hasPY, _yoyArrow & FORMAT(ABS(_yoy) * 100, "0.0") & "%", "—")
+			VAR _sub1Clr  = IF(_yoy >= 0, "#10b981", "#d93025")
+			VAR _dealData = ADDCOLUMNS(ALL(DimDealer), "@o", CALCULATE([# Orders]))
+			VAR _top1     = TOPN(1, FILTER(_dealData, [@o] > 0), [@o], DESC)
+			VAR _dName    = MAXX(_top1, DimDealer[DealerName])
+			VAR _dOrd     = MAXX(_top1, [@o])
+			VAR _sub2Val  = IF(NOT ISBLANK(_dName), _dName & " (" & FORMAT(_dOrd, "#,0") & " ord.)", "—")
+			RETURN
+			    KPI_SVG_TwoSubs(
+			        "Orders",
+			        _curr,
+			        "orders",
+			        "M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0",
+			        "#FFFFFF",
+			        "#0A1E41",
+			        "#5F6B7C",
+			        "#005A8C",
+			        "#D0E3F0",
+			        "vs Prior Year",
+			        _sub1Val,
+			        _sub1Clr,
+			        "Top dealer:",
+			        _sub2Val,
+			        "#005A8C",
+			        BLANK()
+			    )
+		formatString: General
+		displayFolder: KPI Cards
+		lineageTag: 2b3c4d5e-6f70-8901-bcde-222222222222
+		dataCategory: ImageUrl
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'KPI Card Quota IMG' = ```
+			
+			VAR _attRaw   = [Quota Attainment % (Assigned)]
+			VAR _att      = IF(ISBLANK(_attRaw), 0, _attRaw)
+			VAR _vsq      = [Net Sales vs Quota]
+			VAR _absVsq   = ABS(_vsq)
+			VAR _vsqArrow = IF(_vsq >= 0, "▲ +", "▼ ")
+			VAR _vsqText  = IF(_vsq >= 0, " above quota", " below quota")
+			VAR _fmtAmt   = 
+			    SWITCH(TRUE(),
+			        _absVsq >= 1000000, FORMAT(_absVsq / 1000000, "$0.0\M", "en-US"),
+			        _absVsq >= 1000, FORMAT(_absVsq / 1000, "$0.0\K", "en-US"),
+			        FORMAT(_absVsq, "$0", "en-US")
+			    )
+			VAR _sub1Val  = IF(NOT ISBLANK(_vsq), _vsqArrow & _fmtAmt & _vsqText, "—")
+			VAR _sub1Clr  = IF(_vsq >= 0, "#10b981", "#d93025")
+			VAR _reps     = FILTER(ALL(DimRep), DimRep[RepKey] <> -1)
+			VAR _repAtt   = ADDCOLUMNS(_reps, "@a", CALCULATE([Quota Attainment %]))
+			VAR _top1     = TOPN(1, FILTER(_repAtt, NOT ISBLANK([@a])), [@a], DESC)
+			VAR _repName  = MAXX(_top1, DimRep[RepName])
+			VAR _repAttV  = MAXX(_top1, [@a])
+			VAR _sub2Val  = IF(NOT ISBLANK(_repName), _repName & ": " & FORMAT(_repAttV * 100, "0.0", "en-US") & "%", "—")
+			RETURN
+			    KPI_SVG_TwoSubs(
+			        "Quota Attainment",
+			        ROUND(_att * 100, 1),
+			        "%",
+			        "m22 2-7 20-4-9-9-4 20-7z",
+			        "#FFFFFF",
+			        "#0A1E41",
+			        "#5F6B7C",
+			        "#005A8C",
+			        "#D0E3F0",
+			        "Net Sales vs Quota",
+			        _sub1Val,
+			        _sub1Clr,
+			        "Top rep:",
+			        _sub2Val,
+			        "#005A8C",
+			        BLANK()
+			    )
+			```
+		formatString: General
+		displayFolder: KPI Cards
+		lineageTag: 3c4d5e6f-7081-9012-cdef-333333333333
+		dataCategory: ImageUrl
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Reps Headaer' =
+			
+			VAR _Header = "Sales reps"
+			VAR _Subtitle =  "Select a rep to explore their sales and quota in more detail"
+			RETURN
+			Custom_Header_Ranking(
+			    _Header, --Header
+			    _Subtitle,  --Subtitle
+			    "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2'/><circle cx='7' cy='17' r='2'/><path d='M9 17h6'/><circle cx='17' cy='17' r='2'/></svg>",  --Icon PATH
+			    "#006084", --Optional: Icon color (Granatowy)
+			    "#E6EFF3", --Optional: Icon background (Jasnoniebieskie tło)
+			    BLANK(), --Optional: Title color
+			    BLANK() --Optional: Subtitle color
+			)
+		displayFolder: KPI Cards
+		lineageTag: da796a93-a599-4f52-9f80-c01a964e63de
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Dashboard SVG ProgressBar Default' =
+			
+			VAR _GlobalMax = MAXX(ALL(DimRep), MAX([Net Sales], [Quota Total]))
+			
+			RETURN
+			SVG_Progress_Bar_With_Text_Parametrized(
+			    [Net Sales],
+			    [Quota Total],
+			    [Quota Attainment %],
+			    _GlobalMax,
+			    BLANK(), -- ColorSales: Zostawiamy BLANK, włączy się domyślny ciemnoniebieski (#006084)
+			    BLANK(), -- ColorQuota: Włączy się domyślny jasnoszary (#E2E8F0)
+			    BLANK(), -- ColorSuccess: Włączy się domyślny ciemnozielony (#148A5E)
+			    BLANK()  -- TextColor: Włączy się domyślny ciemnoszary (#333333)
+			)
+		displayFolder: KPI Cards
+		lineageTag: 6401ba7a-cfff-4f89-9b4b-59cafd026628
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Dashboard SVG ProgressBar Selected' =
+			
+			VAR _GlobalMax = MAXX(ALL(DimRep), MAX([Net Sales], [Quota Total]))
+			
+			RETURN
+			SVG_Progress_Bar_With_Text_Parametrized(
+			    [Net Sales],
+			    [Quota Total],
+			    [Quota Attainment %],
+			    _GlobalMax,
+			    "#ffffff",   -- ColorSales: Biały pasek (żeby był widoczny na ciemnym tle)
+			    "#ffffff40", -- ColorQuota: Półprzezroczysty biały (dla paska tła)
+			    "#6EE7B7",   -- ColorSuccess: Jasnozielony/miętowy (lepiej widoczny na ciemnym tle niż ciemna zieleń)
+			    "#ffffff"    -- TextColor: Biały tekst (tak jak w Twoim wzorze)
+			)
+		displayFolder: KPI Cards
+		lineageTag: 79878640-ec84-4b82-8564-5abf68f83de8
+
+	measure 'Sales Shares' =
+			
+			VAR _Header = "Sales share"
+			VAR _Subtitle = "Which territories account for 80% of total sales?"
+			RETURN
+			Custom_Header_Ranking(
+			    _Header, --Header
+			    _Subtitle, --Subtitle
+			    "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='22 7 13.5 15.5 8.5 10.5 2 17'/><polyline points='16 7 22 7 22 13'/></svg>", --Icon PATH
+			    "#006084", --Optional: Icon color (Granatowy)
+			    "#E6EFF3", --Optional: Icon background (Jasnoniebieskie tło)
+			    BLANK(), --Optional: Title color
+			    BLANK() --Optional: Subtitle color
+			)
+		displayFolder: KPI Cards
+		lineageTag: b705fca4-dede-49b8-8e85-ac74ca55e2d2
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Smart Narrative Pareto' = ```
+			
+			-- ── 0. CONTEXT: single rep selected or whole team ───────────────────────────
+			VAR _IsOneRep = HASONEVALUE(DimRep[RepName]) && ISFILTERED(DimRep[RepName])
+			VAR _RepName  = IF(_IsOneRep, SELECTEDVALUE(DimRep[RepName]), BLANK())
+			
+			-- ── 1. ACTIVE TERRITORIES + CHANNEL TOTAL ───────────────────────────────────
+			VAR _TerritoryData =
+			    CALCULATETABLE(
+			        ADDCOLUMNS(VALUES(DimDealer[Territory]), "@Sales", CALCULATE([Net Sales]))
+			    )
+			VAR _ActiveTerr = FILTER(_TerritoryData, [@Sales] > 0)
+			VAR _TotalSales = SUMX(_ActiveTerr, [@Sales])
+			VAR _TotalCount = COUNTROWS(_ActiveTerr)
+			VAR _HasData    = NOT ISBLANK(_TotalSales) && _TotalSales > 0 && _TotalCount > 0
+			
+			-- ── 2. TERRITORY PARETO 80% ─────────────────────────────────────────────────
+			VAR _Threshold = 0.80 * _TotalSales
+			VAR _Ranked    = ADDCOLUMNS(_ActiveTerr, "@Rank", RANKX(_ActiveTerr, [@Sales], , DESC, Dense))
+			VAR _WithCumulative = ADDCOLUMNS(
+			    _Ranked, "@CumSales",
+			    VAR _CurRank = [@Rank]
+			    RETURN SUMX(FILTER(_Ranked, [@Rank] <= _CurRank), [@Sales])
+			)
+			VAR _ParetoCount = COUNTROWS(FILTER(_WithCumulative, [@CumSales] - [@Sales] < _Threshold))
+			VAR _ParetoPct   = FORMAT(DIVIDE(_ParetoCount, _TotalCount), "0%")
+			
+			-- ── 3. BRAND ANALYSIS: share + YoY trend ─────────────────────────────────────
+			VAR _BrandData =
+			    CALCULATETABLE(
+			        ADDCOLUMNS(
+			            VALUES(DimSku[Brand]),
+			            "@Sales",   CALCULATE([Net Sales]),
+			            "@SalesPY", CALCULATE([Net Sales], SAMEPERIODLASTYEAR(DimDate[Date]))
+			        )
+			    )
+			VAR _BrandActive = FILTER(_BrandData, [@Sales] > 0)
+			VAR _BrandMetrics = ADDCOLUMNS(
+			    _BrandActive,
+			    "@Share", DIVIDE([@Sales], _TotalSales),
+			    "@YoY",   IF(
+			        NOT ISBLANK([@SalesPY]) && [@SalesPY] > 0,
+			        DIVIDE([@Sales] - [@SalesPY], [@SalesPY]),
+			        BLANK()
+			    )
+			)
+			
+			VAR _TopBrandRow  = TOPN(1, _BrandMetrics, [@Sales], DESC)
+			VAR _TopBrandName = MAXX(_TopBrandRow, DimSku[Brand])
+			VAR _TopBrandShr  = FORMAT(MAXX(_TopBrandRow, [@Share]), "0%")
+			VAR _TopBrandYoY  = MAXX(_TopBrandRow, [@YoY])
+			VAR _TopBrandIcon = IF(
+			    ISBLANK(_TopBrandYoY), "",
+			    IF(_TopBrandYoY >= 0.03,
+			        " <span style='color:#10b981'>▲ +" & FORMAT(_TopBrandYoY, "0%") & " YoY</span>",
+			    IF(_TopBrandYoY <= -0.03,
+			        " <span style='color:#d93025'>▼ −" & FORMAT(ABS(_TopBrandYoY), "0%") & " YoY</span>",
+			        " <span style='color:#94a3b8'>≈ flat YoY</span>"))
+			)
+			
+			VAR _HighShareDecl = FILTER(
+			    _BrandMetrics,
+			    [@Share] > 0.15 && NOT ISBLANK([@YoY]) && [@YoY] < -0.05
+			        && DimSku[Brand] <> _TopBrandName
+			)
+			VAR _AlertRow   = TOPN(1, _HighShareDecl, [@Share], DESC)
+			VAR _AlertBrand = MAXX(_AlertRow, DimSku[Brand])
+			VAR _AlertShr   = FORMAT(MAXX(_AlertRow, [@Share]), "0%")
+			VAR _AlertYoY   = FORMAT(ABS(MAXX(_AlertRow, [@YoY])), "0%")
+			VAR _HasAlert   = COUNTROWS(_AlertRow) > 0
+			
+			-- ── 4. TIER EFFICIENCY (revenue share vs dealer count share) ────────────────
+			VAR _TierData =
+			    CALCULATETABLE(
+			        ADDCOLUMNS(
+			            VALUES(DimDealer[Tier]),
+			            "@Sales",   CALCULATE([Net Sales]),
+			            "@Dealers", CALCULATE(DISTINCTCOUNT(DimDealer[DealerKey]))
+			        )
+			    )
+			VAR _TierActive   = FILTER(_TierData, [@Sales] > 0)
+			VAR _TotalDealers = SUMX(_TierActive, [@Dealers])
+			VAR _TopTierRow   = TOPN(1, _TierActive, [@Sales], DESC)
+			VAR _TopTierName  = MAXX(_TopTierRow, DimDealer[Tier])
+			VAR _TopTierRevPct = FORMAT(DIVIDE(MAXX(_TopTierRow, [@Sales]),   _TotalSales),   "0%")
+			VAR _TopTierDlrPct = FORMAT(DIVIDE(MAXX(_TopTierRow, [@Dealers]), _TotalDealers), "0%")
+			
+			-- ── 5. COLORS & SCOPE PHRASE ─────────────────────────────────────────────────
+			VAR _C  = "#216085" -- Zaktualizowany kolor dla wyróżnień (błękit morski/granat)
+			VAR _CW = "#d93025"
+			
+			VAR _Scope = IF(_IsOneRep,
+			    "In <b>" & _RepName & "</b>'s portfolio",
+			    "Across the whole team"
+			)
+			
+			-- ── 6. BUILD INSIGHT LINES ───────────────────────────────────────────────────
+			VAR _Dot  = "<span style='color:" & _C  & ";margin-right:6px'>●</span>"
+			VAR _DotW = "<span style='color:" & _CW & ";margin-right:6px'>⚠</span>"
+			VAR _BR   = "<div style='height:7px'></div>"
+			
+			VAR _L1 = 
+			    _Dot & _Scope & ", <b>" & _ParetoCount & "</b> of <b>" & _TotalCount & "</b> territories (<b>" & _ParetoPct & "</b>) drive 80% of sales."
+			
+			VAR _L2 = 
+			    _Dot & "Leading brand: <b>" & _TopBrandName & "</b> (<b>" & _TopBrandShr & "</b> share)" & _TopBrandIcon & "."
+			
+			VAR _L3 = 
+			    _Dot & "<b>" & _TopTierName & "</b> accounts generate <b>" & _TopTierRevPct & "</b> of revenue from only <b>" & _TopTierDlrPct & "</b> of dealers."
+			
+			VAR _L4 = IF(_HasAlert,
+			    _DotW & "<b style='color:" & _CW & "'>" & _AlertBrand & "</b> holds <b style='color:" & _CW & "'>" & _AlertShr & "</b> share but is down <b style='color:" & _CW & "'>" & _AlertYoY & "</b> YoY — worth reviewing.",
+			    ""
+			)
+			
+			VAR _Body = 
+			    _L1 & _BR & _L2 & _BR & _L3 & 
+			    IF(_L4 <> "", _BR & _L4, "")
+			
+			-- ── 7. HTML WRAPPER ──────────────────────────────────────────────────────────
+			-- ── 7. HTML WRAPPER ──────────────────────────────────────────────────────────
+			VAR _Html =
+			"<!DOCTYPE html><html><head><style>
+			    body { 
+			        margin:0; 
+			        padding:0; 
+			        background:transparent; 
+			        font-family: 'Montserrat', Tahoma, Geneva, Verdana, sans-serif; 
+			    }
+			    .widget-container {
+			        padding: 4px; 
+			        color: #666666; /* <--- TUTAJ ZMIANA: Idealnie ten sam szary co w podpisie KPI */
+			        font-size: 13px; 
+			        line-height: 1.6; 
+			    }
+			    b { 
+			        color: " & _C & "; 
+			        font-weight: 600; 
+			    }
+			</style></head>
+			<body><div class='widget-container'>" & _Body & "</div></body></html>"
+			
+			RETURN IF(_HasData, _Html, BLANK())
+			```
+		formatString: General
+		displayFolder: KPI Cards
+		lineageTag: a1b2c3d4-e5f6-7890-abcd-ef0123456789
+
+	measure 'HTML_KPI_Card_Dynamic 2' = ```
+			
+			VAR BadgeText = [Selected PH Name]
+			VAR MainTitle = "High sales consistency ✔"
+			VAR MetricValue = [Sales KPI Deviation]
+			VAR _ID = "kpi_" & FORMAT(RANDBETWEEN(1000, 9999), "0")
+			VAR ExplanationHeader = "COEFFICIENT OF VARIATION (CV)"
+			VAR ExplanationDesc = "This metric indicates the stability of the sales rep's performance based on visits from the last 6 months. It is calculated as the ratio of the standard deviation to the mean. The lower the result (closer to 0%), the more consistent and predictable the representative's work is."
+			VAR MetricColor = SWITCH(TRUE(), MetricValue > 0, "#006084", MetricValue < 0, "#d93025", "#666666")
+			VAR Subtitle = "Variance within normal limits (stable m/m workload) and a mild downward trend"
+			VAR FooterText = "Last 6 months: avg $122,589 (deviation of $9,760)"
+			
+			VAR HtmlString = 
+			"<!DOCTYPE html><html><head><style>
+			    body { margin:0; padding:0; background:transparent; font-family:'Segoe UI', sans-serif; }
+			    .widget-container {
+			        padding: 16px;
+			        background: #F8FAFC;
+			        border-left: 4px solid #006084;
+			        border-radius: 6px;
+			        color: #334155;
+			        font-size: 14px;
+			        line-height: 1.5;
+			        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+			    }
+			    /* NOWY STYL DLA NAGŁÓWKA WEWNĄTRZ */
+			    .card-title {
+			        display: block;
+			        color: #006084;
+			        font-weight: 700;
+			        font-size: 15px;
+			        margin-bottom: 6px;
+			        text-transform: uppercase;
+			        letter-spacing: 0.5px;
+			    }
+			    b { color: #006084; font-weight: 600; }
+			</style></head>
+			<body>
+			    <div class='widget-container'>
+			        <span class='card-title'>Market Concentration Insight</span>
+			        Across the whole team, just <b>8</b> out of <b>18</b> active territories (<b>44%</b>) drive 80% of total sales. The top engine of these key markets is the <b>Components</b> category, accounting for <b>83%</b> of their revenue.
+			    </div>
+			</body></html>"
+			
+			RETURN HtmlString
+			```
+		displayFolder: KPI Cards
+		lineageTag: 6f51787b-24f5-4e7e-a531-1e470055738b
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure Page_Header_Modern = ```
+			
+			VAR _HtmlString = 
+			"<!DOCTYPE html>
+			<html>
+			<head>
+			<style>
+			    body { margin: 0; padding: 0; background: transparent; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+			    .header-container { 
+			        display: flex; 
+			        align-items: baseline; 
+			        gap: 12px; 
+			        padding-left: 5px;
+			    }
+			    .main-title { 
+			        font-size: 22px; 
+			        font-weight: 800; 
+			        text-transform: uppercase;
+			        letter-spacing: -0.5px;
+			        /* Gradient: granat -> czerń */
+			        background: linear-gradient(90deg, #006084 0%, #111827 100%);
+			        -webkit-background-clip: text;
+			        -webkit-text-fill-color: transparent;
+			        background-clip: text;
+			    }
+			    .separator { 
+			        color: #cbd5e1; 
+			        font-weight: 300; 
+			        font-size: 24px;
+			    }
+			    .sub-title { 
+			        font-size: 14px; 
+			        color: #475569; 
+			        font-weight: 500; 
+			    }
+			</style>
+			</head>
+			<body>
+			    <div class='header-container'>
+			        <div class='main-title'>TEAM PERFORMANCE</div>
+			        <div class='separator'>//</div>
+			        <div class='sub-title'>Sales, Quota & Territory Insights</div>
+			    </div>
+			</body>
+			</html>"
+			
+			RETURN _HtmlString
+			```
+		displayFolder: KPI Cards
+		lineageTag: f80a45cd-9f53-4e1c-bdb7-0fd23f6ced60
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Date Picker SVG' = ```
+			
+			VAR KodSVG = 
+			"<svg width='497' height='135' viewBox='0 0 497 135' fill='none' xmlns='http://www.w3.org/2000/svg'>
+			<path d='M477.728 2.47705H19.2712C9.74821 2.47705 2.02832 11.9037 2.02832 23.5321V111.468C2.02832 123.096 9.74821 132.523 19.2712 132.523H477.728C487.251 132.523 494.971 123.096 494.971 111.468V23.5321C494.971 11.9037 487.251 2.47705 477.728 2.47705Z' fill='white'/>
+			<mask id='mask0_100_95' style='mask-type:luminance' maskUnits='userSpaceOnUse' x='2' y='2' width='493' height='131'>
+			<path d='M477.728 2.47705H19.2712C9.74821 2.47705 2.02832 11.9037 2.02832 23.5321V111.468C2.02832 123.096 9.74821 132.523 19.2712 132.523H477.728C487.251 132.523 494.971 123.096 494.971 111.468V23.5321C494.971 11.9037 487.251 2.47705 477.728 2.47705Z' fill='white'/>
+			</mask>
+			<g mask='url(#mask0_100_95)'>
+			<g opacity='0.06'>
+			<path d='M397.6 -12.3853L519.314 130.046' stroke='#0A5A78' stroke-width='2'/>
+			<path d='M421.942 -12.3853L543.657 130.046' stroke='#0A5A78' stroke-width='2'/>
+			<path d='M446.285 -12.3853L567.999 130.046' stroke='#0A5A78' stroke-width='2'/>
+			</g>
+			</g>
+			<mask id='mask1_100_95' style='mask-type:luminance' maskUnits='userSpaceOnUse' x='2' y='2' width='493' height='131'>
+			<path d='M477.728 2.47705H19.2712C9.74821 2.47705 2.02832 11.9037 2.02832 23.5321V111.468C2.02832 123.096 9.74821 132.523 19.2712 132.523H477.728C487.251 132.523 494.971 123.096 494.971 111.468V23.5321C494.971 11.9037 487.251 2.47705 477.728 2.47705Z' fill='white'/>
+			</mask>
+			<g mask='url(#mask1_100_95)'>
+			<g opacity='0.06'>
+			<path d='M562.928 81.7432H406.728C405.048 81.7432 403.686 83.4067 403.686 85.4588V92.89C403.686 94.942 405.048 96.6056 406.728 96.6056H562.928C564.609 96.6056 565.971 94.942 565.971 92.89V85.4588C565.971 83.4067 564.609 81.7432 562.928 81.7432Z' fill='#0A5A78'/>
+			<path d='M419.914 105.275H406.728C405.048 105.275 403.686 106.939 403.686 108.991V120.138C403.686 122.19 405.048 123.853 406.728 123.853H419.914C421.595 123.853 422.957 122.19 422.957 120.138V108.991C422.957 106.939 421.595 105.275 419.914 105.275Z' fill='#0A5A78'/>
+			<path d='M445.272 105.275H432.086C430.405 105.275 429.043 106.939 429.043 108.991V120.138C429.043 122.19 430.405 123.853 432.086 123.853H445.272C446.952 123.853 448.314 122.19 448.314 120.138V108.991C448.314 106.939 446.952 105.275 445.272 105.275Z' fill='#0A5A78'/>
+			<path d='M470.628 105.275H457.442C455.762 105.275 454.399 106.939 454.399 108.991V120.138C454.399 122.19 455.762 123.853 457.442 123.853H470.628C472.309 123.853 473.671 122.19 473.671 120.138V108.991C473.671 106.939 472.309 105.275 470.628 105.275Z' fill='#0A5A78'/>
+			<path d='M495.985 105.275H482.8C481.119 105.275 479.757 106.939 479.757 108.991V120.138C479.757 122.19 481.119 123.853 482.8 123.853H495.985C497.666 123.853 499.028 122.19 499.028 120.138V108.991C499.028 106.939 497.666 105.275 495.985 105.275Z' fill='#0A5A78'/>
+			<path d='M419.914 128.808H406.728C405.048 128.808 403.686 130.471 403.686 132.523V143.67C403.686 145.722 405.048 147.386 406.728 147.386H419.914C421.595 147.386 422.957 145.722 422.957 143.67V132.523C422.957 130.471 421.595 128.808 419.914 128.808Z' fill='#0A5A78'/>
+			<path d='M445.272 128.808H432.086C430.405 128.808 429.043 130.471 429.043 132.523V143.67C429.043 145.722 430.405 147.386 432.086 147.386H445.272C446.952 147.386 448.314 145.722 448.314 143.67V132.523C448.314 130.471 446.952 128.808 445.272 128.808Z' fill='#0A5A78'/>
+			<path d='M470.628 128.808H457.442C455.762 128.808 454.399 130.471 454.399 132.523V143.67C454.399 145.722 455.762 147.386 457.442 147.386H470.628C472.309 147.386 473.671 145.722 473.671 143.67V132.523C473.671 130.471 472.309 128.808 470.628 128.808Z' fill='#0A5A78'/>
+			<path d='M495.985 128.808H482.8C481.119 128.808 479.757 130.471 479.757 132.523V143.67C479.757 145.722 481.119 147.386 482.8 147.386H495.985C497.666 147.386 499.028 145.722 499.028 143.67V132.523C499.028 130.471 497.666 128.808 495.985 128.808Z' fill='#0A5A78'/>
+			</g>
+			</g>
+			<path d='M71.0457 49H40.6399C32.5545 49 26 55.6805 26 63.9214V94.912C26 103.153 32.5545 109.833 40.6399 109.833H71.0457C79.1311 109.833 85.6855 103.153 85.6855 94.912V63.9214C85.6855 55.6805 79.1311 49 71.0457 49Z' fill='url(#paint0_linear_100_95)'/>
+			<path d='M67.2175 64.7979H44.8308C42.3581 64.7979 40.3535 66.8659 40.3535 69.4169V90.2025C40.3535 92.7535 42.3581 94.8215 44.8308 94.8215H67.2175C69.6903 94.8215 71.6948 92.7535 71.6948 90.2025V69.4169C71.6948 66.8659 69.6903 64.7979 67.2175 64.7979Z' stroke='white' stroke-width='2.75472' stroke-linecap='round' stroke-linejoin='round'/>
+			<path d='M40.3535 74.0361H71.6948' stroke='white' stroke-width='2.75472' stroke-linecap='round' stroke-linejoin='round'/>
+			<path d='M49.3066 60.1792V67.1077' stroke='white' stroke-width='2.75472' stroke-linecap='round' stroke-linejoin='round'/>
+			<path d='M62.7393 60.1792V67.1077' stroke='white' stroke-width='2.75472' stroke-linecap='round' stroke-linejoin='round'/>
+			<path d='M47.0689 85.2372C48.1198 85.2372 48.9717 84.3583 48.9717 83.2741C48.9717 82.1899 48.1198 81.311 47.0689 81.311C46.018 81.311 45.166 82.1899 45.166 83.2741C45.166 84.3583 46.018 85.2372 47.0689 85.2372Z' fill='#2E9E5B'/>
+			<path d='M56.023 85.2372C57.0739 85.2372 57.9258 84.3583 57.9258 83.2741C57.9258 82.1899 57.0739 81.311 56.023 81.311C54.9721 81.311 54.1201 82.1899 54.1201 83.2741C54.1201 84.3583 54.9721 85.2372 56.023 85.2372Z' fill='#2E9E5B'/>
+			<path d='M64.9781 85.2372C66.029 85.2372 66.8809 84.3583 66.8809 83.2741C66.8809 82.1899 66.029 81.311 64.9781 81.311C63.9271 81.311 63.0752 82.1899 63.0752 83.2741C63.0752 84.3583 63.9271 85.2372 64.9781 85.2372Z' fill='#2E9E5B'/>
+			<defs>
+			<linearGradient id='paint0_linear_100_95' x1='26' y1='49' x2='86.8223' y2='108.675' gradientUnits='userSpaceOnUse'>
+			<stop stop-color='#0A5A78'/>
+			<stop offset='1' stop-color='#063A50'/>
+			</linearGradient>
+			</defs>
+			</svg>
+			
+			"
+			VAR _svg2 = 
+			"<svg width='1920' height='1080' viewBox='0 0 1920 1080' fill='none' xmlns='http://www.w3.org/2000/svg'>
+			<g clip-path='url(#clip0_87_42)'>
+			<path d='M0 80C0 35.8172 35.8172 0 80 0H280.372C324.555 0 360.372 35.8172 360.372 80V1000C360.372 1044.18 324.555 1080 280.372 1080H80.0001C35.8173 1080 0 1044.18 0 1000V80Z' fill='url(#paint0_radial_87_42)'/>
+			<g filter='url(#filter0_d_87_42)'>
+			<path d='M262.089 60C262.089 26.8629 288.952 0 322.089 0H1910C1915.52 0 1920 4.47715 1920 10V1070C1920 1075.52 1915.52 1080 1910 1080H322.089C288.952 1080 262.089 1053.14 262.089 1020V60Z' fill='url(#paint1_linear_87_42)'/>
+			<path d='M322.089 0.5H1910C1915.25 0.500071 1919.5 4.75334 1919.5 10V1070C1919.5 1075.25 1915.25 1079.5 1910 1079.5H322.089C289.228 1079.5 262.589 1052.86 262.589 1020V60C262.589 27.1391 289.228 0.500001 322.089 0.5Z' stroke='#F9F9F9'/>
+			</g>
+			<g clip-path='url(#clip1_87_42)'>
+			<path opacity='0.1' d='M42.0411 84.1977C43.0014 84.1977 43.7799 83.3756 43.7799 82.3615C43.7799 81.3475 43.0014 80.5254 42.0411 80.5254C41.0807 80.5254 40.3022 81.3475 40.3022 82.3615C40.3022 83.3756 41.0807 84.1977 42.0411 84.1977Z' fill='white'/>
+			<path opacity='0.12' d='M55.0821 88.788C56.0424 88.788 56.8209 87.966 56.8209 86.9519C56.8209 85.9378 56.0424 85.1157 55.0821 85.1157C54.1218 85.1157 53.3433 85.9378 53.3433 86.9519C53.3433 87.966 54.1218 88.788 55.0821 88.788Z' fill='white'/>
+			<path opacity='0.15' d='M46.3881 102.56C47.3484 102.56 48.1269 101.737 48.1269 100.723C48.1269 99.7093 47.3484 98.8872 46.3881 98.8872C45.4278 98.8872 44.6493 99.7093 44.6493 100.723C44.6493 101.737 45.4278 102.56 46.3881 102.56Z' fill='white'/>
+			<path opacity='0.08' d='M59.4291 107.15C60.3894 107.15 61.1679 106.328 61.1679 105.314C61.1679 104.3 60.3894 103.478 59.4291 103.478C58.4688 103.478 57.6903 104.3 57.6903 105.314C57.6903 106.328 58.4688 107.15 59.4291 107.15Z' fill='white'/>
+			<path opacity='0.1' d='M72.4701 93.3784C73.4304 93.3784 74.2089 92.5563 74.2089 91.5422C74.2089 90.5281 73.4304 89.7061 72.4701 89.7061C71.5098 89.7061 70.7313 90.5281 70.7313 91.5422C70.7313 92.5563 71.5098 93.3784 72.4701 93.3784Z' fill='white'/>
+			<path opacity='0.1' d='M81.1642 111.74C82.1245 111.74 82.903 110.918 82.903 109.904C82.903 108.89 82.1245 108.068 81.1642 108.068C80.2039 108.068 79.4254 108.89 79.4254 109.904C79.4254 110.918 80.2039 111.74 81.1642 111.74Z' fill='white'/>
+			<path opacity='0.1' d='M228.963 84.1977C229.923 84.1977 230.701 83.3756 230.701 82.3615C230.701 81.3475 229.923 80.5254 228.963 80.5254C228.002 80.5254 227.224 81.3475 227.224 82.3615C227.224 83.3756 228.002 84.1977 228.963 84.1977Z' fill='white'/>
+			<path opacity='0.1' d='M242.004 88.788C242.964 88.788 243.743 87.966 243.743 86.9519C243.743 85.9378 242.964 85.1157 242.004 85.1157C241.043 85.1157 240.265 85.9378 240.265 86.9519C240.265 87.966 241.043 88.788 242.004 88.788Z' fill='white'/>
+			<path opacity='0.1' d='M250.698 102.56C251.658 102.56 252.437 101.737 252.437 100.723C252.437 99.7093 251.658 98.8872 250.698 98.8872C249.737 98.8872 248.959 99.7093 248.959 100.723C248.959 101.737 249.737 102.56 250.698 102.56Z' fill='white'/>
+			<path opacity='0.1' d='M237.657 107.15C238.617 107.15 239.396 106.328 239.396 105.314C239.396 104.3 238.617 103.478 237.657 103.478C236.696 103.478 235.918 104.3 235.918 105.314C235.918 106.328 236.696 107.15 237.657 107.15Z' fill='white'/>
+			<path opacity='0.1' d='M255.045 120.921C256.005 120.921 256.784 120.099 256.784 119.085C256.784 118.071 256.005 117.249 255.045 117.249C254.084 117.249 253.306 118.071 253.306 119.085C253.306 120.099 254.084 120.921 255.045 120.921Z' fill='white'/>
+			<path opacity='0.1' d='M42.0411 690.13C43.0014 690.13 43.7799 689.308 43.7799 688.294C43.7799 687.28 43.0014 686.458 42.0411 686.458C41.0807 686.458 40.3022 687.28 40.3022 688.294C40.3022 689.308 41.0807 690.13 42.0411 690.13Z' fill='white'/>
+			<path opacity='0.1' d='M55.0821 694.72C56.0424 694.72 56.8209 693.898 56.8209 692.884C56.8209 691.87 56.0424 691.048 55.0821 691.048C54.1218 691.048 53.3433 691.87 53.3433 692.884C53.3433 693.898 54.1218 694.72 55.0821 694.72Z' fill='white'/>
+			<path opacity='0.1' d='M46.3881 703.901C47.3484 703.901 48.1269 703.079 48.1269 702.065C48.1269 701.051 47.3484 700.229 46.3881 700.229C45.4278 700.229 44.6493 701.051 44.6493 702.065C44.6493 703.079 45.4278 703.901 46.3881 703.901Z' fill='white'/>
+			<path opacity='0.1' d='M59.4291 708.492C60.3894 708.492 61.1679 707.67 61.1679 706.655C61.1679 705.641 60.3894 704.819 59.4291 704.819C58.4688 704.819 57.6903 705.641 57.6903 706.655C57.6903 707.67 58.4688 708.492 59.4291 708.492Z' fill='white'/>
+			<path opacity='0.08' d='M228.963 699.311C229.923 699.311 230.701 698.489 230.701 697.475C230.701 696.461 229.923 695.639 228.963 695.639C228.002 695.639 227.224 696.461 227.224 697.475C227.224 698.489 228.002 699.311 228.963 699.311Z' fill='white'/>
+			<path opacity='0.08' d='M246.351 708.492C247.311 708.492 248.09 707.67 248.09 706.655C248.09 705.641 247.311 704.819 246.351 704.819C245.39 704.819 244.612 705.641 244.612 706.655C244.612 707.67 245.39 708.492 246.351 708.492Z' fill='white'/>
+			<path opacity='0.08' d='M81.1642 210.893L115.94 247.616' stroke='white' stroke-width='1.5'/>
+			<path opacity='0.08' d='M185.493 339.424L228.963 385.328' stroke='white' stroke-width='1.2'/>
+			<path opacity='0.08' d='M63.7761 523.04H115.94' stroke='white' stroke-width='1.5'/>
+			<path opacity='0.06' d='M159.41 596.486V651.571' stroke='white' stroke-width='1.5'/>
+			<path opacity='0.2' d='M39.5596 320.401C40.1442 320.401 40.6182 319.546 40.6182 318.492C40.6182 317.437 40.1442 316.582 39.5596 316.582C38.9749 316.582 38.501 317.437 38.501 318.492C38.501 319.546 38.9749 320.401 39.5596 320.401Z' fill='white'/>
+			<path opacity='0.1' d='M208.937 340.452C209.814 340.452 210.525 339.17 210.525 337.588C210.525 336.006 209.814 334.723 208.937 334.723C208.06 334.723 207.349 336.006 207.349 337.588C207.349 339.17 208.06 340.452 208.937 340.452Z' fill='white'/>
+			<path opacity='0.2' d='M129.541 434.5C129.98 434.5 130.335 433.859 130.335 433.068C130.335 432.277 129.98 431.636 129.541 431.636C129.103 431.636 128.747 432.277 128.747 433.068C128.747 433.859 129.103 434.5 129.541 434.5Z' fill='white'/>
+			<path opacity='0.15' d='M76.6107 368.619C77.3416 368.619 77.934 367.55 77.934 366.232C77.934 364.913 77.3416 363.845 76.6107 363.845C75.8799 363.845 75.2875 364.913 75.2875 366.232C75.2875 367.55 75.8799 368.619 76.6107 368.619Z' fill='white'/>
+			<path opacity='0.1' d='M193.058 454.074C193.642 454.074 194.116 453.219 194.116 452.164C194.116 451.109 193.642 450.254 193.058 450.254C192.473 450.254 191.999 451.109 191.999 452.164C191.999 453.219 192.473 454.074 193.058 454.074Z' fill='white'/>
+			<path opacity='0.1' d='M55.4386 461.712H97.7829' stroke='white' stroke-width='2'/>
+			<path opacity='0.15' d='M182.472 328.04H224.816' stroke='white' stroke-width='1.5'/>
+			<path opacity='0.1' d='M156.006 385.328V442.616' stroke='white' stroke-width='2'/>
+			<path opacity='0.1' d='M66.0247 308.944L87.1968 347.136' stroke='white' stroke-width='1.5'/>
+			<path opacity='0.1' d='M113.662 337.588H140.127' stroke='white'/>
+			</g>
+			</g>
+			<defs>
+			<filter id='filter0_d_87_42' x='217.089' y='-40' width='1737.91' height='1160' filterUnits='userSpaceOnUse' color-interpolation-filters='sRGB'>
+			<feFlood flood-opacity='0' result='BackgroundImageFix'/>
+			<feColorMatrix in='SourceAlpha' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0' result='hardAlpha'/>
+			<feOffset dx='-5'/>
+			<feGaussianBlur stdDeviation='20'/>
+			<feComposite in2='hardAlpha' operator='out'/>
+			<feColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0'/>
+			<feBlend mode='normal' in2='BackgroundImageFix' result='effect1_dropShadow_87_42'/>
+			<feBlend mode='normal' in='SourceGraphic' in2='effect1_dropShadow_87_42' result='shape'/>
+			</filter>
+			<radialGradient id='paint0_radial_87_42' cx='0' cy='0' r='1' gradientTransform='matrix(385.794 -366.581 255.359 613.522 -112.678 1015.5)' gradientUnits='userSpaceOnUse'>
+			<stop stop-color='#F19999'/>
+			<stop offset='1' stop-color='#8CE19E'/>
+			</radialGradient>
+			<linearGradient id='paint1_linear_87_42' x1='262.089' y1='541.803' x2='1920' y2='537.769' gradientUnits='userSpaceOnUse'>
+			<stop offset='0.125' stop-color='#FAFAF9'/>
+			<stop offset='0.77' stop-color='#FAFAF9'/>
+			</linearGradient>
+			<clipPath id='clip0_87_42'>
+			<rect width='1920' height='1080' fill='white'/>
+			</clipPath>
+			<clipPath id='clip1_87_42'>
+			<rect width='233' height='650' fill='white' transform='translate(29 64)'/>
+			</clipPath>
+			</defs>
+			</svg>
+			
+			
+			"
+			RETURN
+			"data:image/svg+xml;utf8," & 
+			SWITCH(
+			    SELECTEDVALUE('Parameter: Theme'[Value4]),
+			    1, KodSVG,
+			    2, _svg2,
+			    KodSVG
+			)
+			```
+		lineageTag: f8912697-d17d-4941-90a3-07e6646e43e5
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Lines SVG' = ```
+			
+			VAR KodSVG = 
+			"<svg viewBox='0 0 900 240' xmlns='http://www.w3.org/2000/svg'>
+			<g>
+			<line x1='70' y1='80' x2='150' y2='150' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='150' y1='150' x2='210' y2='70' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='210' y1='70' x2='300' y2='120' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='300' y1='120' x2='380' y2='60' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='300' y1='120' x2='300' y2='200' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='380' y1='60' x2='470' y2='150' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='470' y1='150' x2='540' y2='90' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='470' y1='150' x2='560' y2='200' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='470' y1='150' x2='430' y2='210' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='540' y1='90' x2='620' y2='170' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='540' y1='90' x2='560' y2='200' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='620' y1='170' x2='700' y2='80' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='620' y1='170' x2='560' y2='200' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='700' y1='80' x2='770' y2='140' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<line x1='770' y1='140' x2='840' y2='70' stroke='#0A5A78' stroke-width='1.5' opacity='0.09'/>
+			<circle cx='70' cy='80' r='3.2' fill='#2E9E5B' opacity='0.22'/>
+			<circle cx='150' cy='150' r='2.4' fill='#0A5A78' opacity='0.16'/>
+			<circle cx='210' cy='70' r='2.4' fill='#0A5A78' opacity='0.16'/>
+			<circle cx='300' cy='120' r='2.4' fill='#0A5A78' opacity='0.16'/>
+			<circle cx='380' cy='60' r='3.2' fill='#0A5A78' opacity='0.22'/>
+			<circle cx='300' cy='200' r='2.4' fill='#2E9E5B' opacity='0.16'/>
+			<circle cx='470' cy='150' r='2.4' fill='#0A5A78' opacity='0.16'/>
+			<circle cx='540' cy='90' r='2.4' fill='#0A5A78' opacity='0.16'/>
+			<circle cx='620' cy='170' r='3.2' fill='#0A5A78' opacity='0.22'/>
+			<circle cx='700' cy='80' r='2.4' fill='#0A5A78' opacity='0.16'/>
+			<circle cx='770' cy='140' r='2.4' fill='#2E9E5B' opacity='0.16'/>
+			<circle cx='840' cy='70' r='2.4' fill='#0A5A78' opacity='0.16'/>
+			<circle cx='560' cy='200' r='3.2' fill='#0A5A78' opacity='0.22'/>
+			<circle cx='430' cy='210' r='2.4' fill='#0A5A78' opacity='0.16'/>
+			</g>
+			</svg>"
+			RETURN
+			"data:image/svg+xml;utf8," & KodSVG
+			```
+		lineageTag: 875eca56-01af-4f82-92f7-44fbda6ffd28
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Logo SVG' = ```
+			
+			VAR KodSVG = 
+			"<svg width='260' height='162' viewBox='0 0 260 162' fill='none' xmlns='http://www.w3.org/2000/svg'>
+			<path d='M110 30C96.0003 32 96.0003 48 111 50' stroke='#C4CDD3' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/>
+			<path d='M150 30C164 32 164 48 149 50' stroke='#C4CDD3' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/>
+			<path d='M107 25H153C153 49 140 59 132 59H128C120 59 107 49 107 25Z' stroke='#C4CDD3' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/>
+			<path d='M130 59V71' stroke='#C4CDD3' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/>
+			<path d='M125 71H135' stroke='#C4CDD3' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/>
+			<path d='M114 79H146' stroke='#C4CDD3' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/>
+			<path d='M123 45H120C119.448 45 119 45.4477 119 46V51C119 51.5523 119.448 52 120 52H123C123.552 52 124 51.5523 124 51V46C124 45.4477 123.552 45 123 45Z' fill='#9FAAB2'/>
+			<path d='M131.5 40H128.5C127.948 40 127.5 40.4477 127.5 41V51C127.5 51.5523 127.948 52 128.5 52H131.5C132.052 52 132.5 51.5523 132.5 51V41C132.5 40.4477 132.052 40 131.5 40Z' fill='#CBD3D9'/>
+			<path d='M140 35H137C136.448 35 136 35.4477 136 36V51C136 51.5523 136.448 52 137 52H140C140.552 52 141 51.5523 141 51V36C141 35.4477 140.552 35 140 35Z' fill='white'/>
+			<path d='M62.1615 98.5831V94.2727H82.4697V98.5831H74.8994V119H69.7318V98.5831H62.1615ZM87.0548 119H81.4525L89.9887 94.2727H96.7259L105.25 119H99.6478L93.4539 99.9233H93.2607L87.0548 119ZM86.7046 109.281H99.9376V113.362H86.7046V109.281ZM123.5 94.2727H128.728V110.331C128.728 112.134 128.297 113.712 127.436 115.064C126.583 116.416 125.387 117.471 123.85 118.227C122.312 118.976 120.522 119.35 118.477 119.35C116.424 119.35 114.629 118.976 113.092 118.227C111.555 117.471 110.359 116.416 109.506 115.064C108.653 113.712 108.226 112.134 108.226 110.331V94.2727H113.454V109.884C113.454 110.826 113.66 111.663 114.07 112.396C114.489 113.128 115.076 113.704 115.833 114.122C116.589 114.541 117.471 114.75 118.477 114.75C119.491 114.75 120.373 114.541 121.121 114.122C121.878 113.704 122.461 113.128 122.872 112.396C123.29 111.663 123.5 110.826 123.5 109.884V94.2727ZM146.443 101.384C146.347 100.41 145.932 99.6536 145.199 99.1143C144.467 98.575 143.473 98.3054 142.217 98.3054C141.364 98.3054 140.644 98.4261 140.056 98.6676C139.468 98.901 139.018 99.227 138.704 99.6456C138.398 100.064 138.245 100.539 138.245 101.07C138.229 101.513 138.321 101.899 138.523 102.229C138.732 102.559 139.018 102.845 139.38 103.087C139.742 103.32 140.161 103.525 140.636 103.702C141.11 103.871 141.618 104.016 142.157 104.137L144.378 104.668C145.457 104.91 146.447 105.232 147.349 105.634C148.25 106.037 149.031 106.532 149.691 107.119C150.351 107.707 150.862 108.399 151.224 109.196C151.595 109.993 151.784 110.906 151.792 111.937C151.784 113.45 151.397 114.762 150.633 115.873C149.876 116.976 148.781 117.833 147.349 118.445C145.924 119.048 144.205 119.35 142.193 119.35C140.197 119.35 138.458 119.044 136.977 118.433C135.504 117.821 134.353 116.915 133.524 115.716C132.703 114.509 132.272 113.015 132.232 111.237H137.291C137.347 112.066 137.585 112.758 138.003 113.313C138.43 113.861 138.998 114.275 139.706 114.557C140.422 114.83 141.231 114.967 142.133 114.967C143.018 114.967 143.787 114.839 144.439 114.581C145.099 114.323 145.61 113.965 145.972 113.506C146.334 113.048 146.516 112.52 146.516 111.925C146.516 111.369 146.351 110.902 146.021 110.524C145.699 110.146 145.224 109.824 144.596 109.558C143.976 109.293 143.215 109.051 142.314 108.834L139.621 108.158C137.537 107.651 135.891 106.858 134.683 105.779C133.476 104.701 132.876 103.248 132.884 101.42C132.876 99.9233 133.275 98.6153 134.079 97.4964C134.892 96.3776 136.007 95.5043 137.424 94.8764C138.841 94.2486 140.45 93.9347 142.253 93.9347C144.089 93.9347 145.69 94.2486 147.059 94.8764C148.435 95.5043 149.506 96.3776 150.271 97.4964C151.035 98.6153 151.43 99.9112 151.454 101.384H146.443ZM178.031 106.636C178.031 109.333 177.52 111.627 176.498 113.518C175.484 115.41 174.099 116.855 172.345 117.853C170.598 118.843 168.634 119.338 166.453 119.338C164.255 119.338 162.283 118.839 160.536 117.841C158.79 116.843 157.409 115.398 156.395 113.506C155.381 111.615 154.874 109.325 154.874 106.636C154.874 103.94 155.381 101.646 156.395 99.7543C157.409 97.8627 158.79 96.4219 160.536 95.4318C162.283 94.4337 164.255 93.9347 166.453 93.9347C168.634 93.9347 170.598 94.4337 172.345 95.4318C174.099 96.4219 175.484 97.8627 176.498 99.7543C177.52 101.646 178.031 103.94 178.031 106.636ZM172.731 106.636C172.731 104.89 172.469 103.417 171.946 102.217C171.431 101.018 170.703 100.108 169.761 99.4886C168.819 98.8688 167.716 98.5589 166.453 98.5589C165.189 98.5589 164.086 98.8688 163.144 99.4886C162.203 100.108 161.47 101.018 160.947 102.217C160.432 103.417 160.174 104.89 160.174 106.636C160.174 108.383 160.432 109.856 160.947 111.055C161.47 112.255 162.203 113.164 163.144 113.784C164.086 114.404 165.189 114.714 166.453 114.714C167.716 114.714 168.819 114.404 169.761 113.784C170.703 113.164 171.431 112.255 171.946 111.055C172.469 109.856 172.731 108.383 172.731 106.636ZM181.904 119V94.2727H187.132V114.69H197.733V119H181.904Z' fill='#F1F6F8'/>
+			<path d='M66.4052 139.5H63.6981V131.864H66.4275C67.1956 131.864 67.8569 132.017 68.4112 132.322C68.9655 132.626 69.3918 133.062 69.6901 133.631C69.9909 134.2 70.1413 134.881 70.1413 135.674C70.1413 136.47 69.9909 137.153 69.6901 137.725C69.3918 138.297 68.963 138.736 68.4037 139.041C67.8469 139.347 67.1807 139.5 66.4052 139.5ZM65.3127 138.117H66.338C66.8153 138.117 67.2168 138.032 67.5424 137.863C67.8705 137.692 68.1166 137.427 68.2807 137.069C68.4472 136.708 68.5305 136.244 68.5305 135.674C68.5305 135.11 68.4472 134.649 68.2807 134.291C68.1166 133.933 67.8718 133.67 67.5461 133.501C67.2205 133.331 66.819 133.247 66.3418 133.247H65.3127V138.117ZM72.2229 139.5H70.4927L73.1289 131.864H75.2095L77.842 139.5H76.1119L74.1991 133.609H74.1394L72.2229 139.5ZM72.1147 136.498H76.2014V137.759H72.1147V136.498ZM82.7294 134.06C82.6996 133.759 82.5715 133.525 82.3453 133.359C82.1191 133.192 81.8121 133.109 81.4243 133.109C81.1608 133.109 80.9384 133.146 80.7569 133.221C80.5754 133.293 80.4362 133.394 80.3393 133.523C80.2448 133.652 80.1976 133.799 80.1976 133.963C80.1926 134.1 80.2212 134.219 80.2834 134.321C80.348 134.423 80.4362 134.511 80.5481 134.586C80.66 134.658 80.7892 134.721 80.9359 134.776C81.0825 134.828 81.2391 134.873 81.4057 134.91L82.0918 135.074C82.4249 135.149 82.7306 135.248 83.009 135.372C83.2874 135.497 83.5286 135.65 83.7324 135.831C83.9362 136.012 84.0941 136.226 84.2059 136.472C84.3203 136.718 84.3787 137.001 84.3812 137.319C84.3787 137.786 84.2594 138.191 84.0232 138.534C83.7896 138.875 83.4515 139.14 83.009 139.328C82.569 139.515 82.0383 139.608 81.4169 139.608C80.8004 139.608 80.2635 139.514 79.8061 139.325C79.3512 139.136 78.9957 138.856 78.7397 138.486C78.4861 138.113 78.3531 137.652 78.3407 137.102H79.903C79.9204 137.358 79.9938 137.572 80.123 137.744C80.2548 137.913 80.43 138.041 80.6488 138.128C80.87 138.212 81.1198 138.255 81.3982 138.255C81.6717 138.255 81.9091 138.215 82.1104 138.135C82.3143 138.056 82.4721 137.945 82.584 137.803C82.6958 137.662 82.7518 137.499 82.7518 137.315C82.7518 137.143 82.7008 136.999 82.5989 136.882C82.4994 136.766 82.3528 136.666 82.1589 136.584C81.9675 136.502 81.7326 136.428 81.4542 136.36L80.6227 136.152C79.9788 135.995 79.4705 135.75 79.0976 135.417C78.7248 135.084 78.5396 134.635 78.5421 134.071C78.5396 133.609 78.6626 133.205 78.9112 132.859C79.1623 132.514 79.5065 132.244 79.944 132.05C80.3815 131.856 80.8787 131.759 81.4355 131.759C82.0023 131.759 82.497 131.856 82.9195 132.05C83.3446 132.244 83.6752 132.514 83.9114 132.859C84.1475 133.205 84.2693 133.605 84.2768 134.06H82.7294ZM85.4672 139.5V131.864H87.0817V135.014H90.3592V131.864H91.97V139.5H90.3592V136.346H87.0817V139.5H85.4672ZM93.3012 139.5V131.864H96.3587C96.9205 131.864 97.389 131.947 97.7644 132.113C98.1398 132.28 98.4219 132.511 98.6108 132.807C98.7997 133.1 98.8942 133.438 98.8942 133.821C98.8942 134.119 98.8345 134.382 98.7152 134.608C98.5959 134.832 98.4318 135.016 98.223 135.16C98.0167 135.301 97.7806 135.402 97.5146 135.462V135.536C97.8054 135.549 98.0776 135.631 98.3312 135.782C98.5872 135.934 98.7948 136.147 98.9539 136.42C99.1129 136.691 99.1925 137.014 99.1925 137.39C99.1925 137.795 99.0918 138.156 98.8905 138.475C98.6916 138.79 98.397 139.04 98.0068 139.224C97.6165 139.408 97.1355 139.5 96.5638 139.5H93.3012ZM94.9157 138.18H96.2319C96.6818 138.18 97.01 138.094 97.2163 137.923C97.4226 137.749 97.5258 137.518 97.5258 137.229C97.5258 137.018 97.4748 136.831 97.3729 136.67C97.271 136.508 97.1256 136.382 96.9366 136.29C96.7502 136.198 96.5277 136.152 96.2692 136.152H94.9157V138.18ZM94.9157 135.059H96.1126C96.3338 135.059 96.5302 135.021 96.7017 134.944C96.8757 134.864 97.0125 134.752 97.1119 134.608C97.2138 134.464 97.2648 134.291 97.2648 134.09C97.2648 133.814 97.1666 133.591 96.9702 133.422C96.7763 133.253 96.5004 133.169 96.1424 133.169H94.9157V135.059ZM107.26 135.682C107.26 136.515 107.103 137.223 106.787 137.807C106.474 138.391 106.046 138.838 105.504 139.146C104.965 139.452 104.358 139.604 103.685 139.604C103.006 139.604 102.397 139.45 101.858 139.142C101.318 138.834 100.892 138.388 100.579 137.803C100.265 137.219 100.109 136.512 100.109 135.682C100.109 134.849 100.265 134.141 100.579 133.556C100.892 132.972 101.318 132.527 101.858 132.222C102.397 131.913 103.006 131.759 103.685 131.759C104.358 131.759 104.965 131.913 105.504 132.222C106.046 132.527 106.474 132.972 106.787 133.556C107.103 134.141 107.26 134.849 107.26 135.682ZM105.624 135.682C105.624 135.142 105.543 134.687 105.381 134.317C105.222 133.947 104.997 133.666 104.706 133.474C104.415 133.283 104.075 133.187 103.685 133.187C103.294 133.187 102.954 133.283 102.663 133.474C102.372 133.666 102.146 133.947 101.984 134.317C101.825 134.687 101.746 135.142 101.746 135.682C101.746 136.221 101.825 136.676 101.984 137.047C102.146 137.417 102.372 137.698 102.663 137.889C102.954 138.081 103.294 138.176 103.685 138.176C104.075 138.176 104.415 138.081 104.706 137.889C104.997 137.698 105.222 137.417 105.381 137.047C105.543 136.676 105.624 136.221 105.624 135.682ZM109.342 139.5H107.612L110.248 131.864H112.329L114.961 139.5H113.231L111.318 133.609H111.259L109.342 139.5ZM109.234 136.498H113.321V137.759H109.234V136.498ZM115.88 139.5V131.864H118.893C119.47 131.864 119.962 131.967 120.37 132.173C120.78 132.377 121.092 132.667 121.306 133.042C121.522 133.415 121.63 133.854 121.63 134.358C121.63 134.865 121.521 135.301 121.302 135.667C121.083 136.03 120.766 136.308 120.351 136.502C119.938 136.696 119.439 136.793 118.852 136.793H116.835V135.495H118.591C118.899 135.495 119.155 135.453 119.359 135.369C119.563 135.284 119.715 135.157 119.814 134.988C119.916 134.819 119.967 134.609 119.967 134.358C119.967 134.105 119.916 133.891 119.814 133.717C119.715 133.543 119.562 133.411 119.355 133.322C119.152 133.23 118.894 133.184 118.584 133.184H117.495V139.5H115.88ZM120.004 136.025L121.902 139.5H120.12L118.263 136.025H120.004ZM125.478 139.5H122.771V131.864H125.5C126.268 131.864 126.93 132.017 127.484 132.322C128.038 132.626 128.465 133.062 128.763 133.631C129.064 134.2 129.214 134.881 129.214 135.674C129.214 136.47 129.064 137.153 128.763 137.725C128.465 138.297 128.036 138.736 127.476 139.041C126.92 139.347 126.253 139.5 125.478 139.5ZM124.385 138.117H125.411C125.888 138.117 126.29 138.032 126.615 137.863C126.943 137.692 127.189 137.427 127.353 137.069C127.52 136.708 127.603 136.244 127.603 135.674C127.603 135.11 127.52 134.649 127.353 134.291C127.189 133.933 126.945 133.67 126.619 133.501C126.293 133.331 125.892 133.247 125.415 133.247H124.385V138.117ZM134.553 134.06C134.523 133.759 134.395 133.525 134.169 133.359C133.942 133.192 133.635 133.109 133.248 133.109C132.984 133.109 132.762 133.146 132.58 133.221C132.399 133.293 132.259 133.394 132.163 133.523C132.068 133.652 132.021 133.799 132.021 133.963C132.016 134.1 132.044 134.219 132.107 134.321C132.171 134.423 132.259 134.511 132.371 134.586C132.483 134.658 132.612 134.721 132.759 134.776C132.906 134.828 133.062 134.873 133.229 134.91L133.915 135.074C134.248 135.149 134.554 135.248 134.832 135.372C135.111 135.497 135.352 135.65 135.556 135.831C135.759 136.012 135.917 136.226 136.029 136.472C136.144 136.718 136.202 137.001 136.204 137.319C136.202 137.786 136.083 138.191 135.846 138.534C135.613 138.875 135.275 139.14 134.832 139.328C134.392 139.515 133.862 139.608 133.24 139.608C132.624 139.608 132.087 139.514 131.629 139.325C131.174 139.136 130.819 138.856 130.563 138.486C130.309 138.113 130.176 137.652 130.164 137.102H131.726C131.744 137.358 131.817 137.572 131.946 137.744C132.078 137.913 132.253 138.041 132.472 138.128C132.693 138.212 132.943 138.255 133.221 138.255C133.495 138.255 133.732 138.215 133.934 138.135C134.137 138.056 134.295 137.945 134.407 137.803C134.519 137.662 134.575 137.499 134.575 137.315C134.575 137.143 134.524 136.999 134.422 136.882C134.323 136.766 134.176 136.666 133.982 136.584C133.791 136.502 133.556 136.428 133.277 136.36L132.446 136.152C131.802 135.995 131.294 135.75 130.921 135.417C130.548 135.084 130.363 134.635 130.365 134.071C130.363 133.609 130.486 133.205 130.734 132.859C130.986 132.514 131.33 132.244 131.767 132.05C132.205 131.856 132.702 131.759 133.259 131.759C133.826 131.759 134.32 131.856 134.743 132.05C135.168 132.244 135.498 132.514 135.735 132.859C135.971 133.205 136.093 133.605 136.1 134.06H134.553ZM153.04 139.5H150.333V131.864H153.063C153.831 131.864 154.492 132.017 155.046 132.322C155.601 132.626 156.027 133.062 156.325 133.631C156.626 134.2 156.777 134.881 156.777 135.674C156.777 136.47 156.626 137.153 156.325 137.725C156.027 138.297 155.598 138.736 155.039 139.041C154.482 139.347 153.816 139.5 153.04 139.5ZM151.948 138.117H152.973C153.451 138.117 153.852 138.032 154.178 137.863C154.506 137.692 154.752 137.427 154.916 137.069C155.082 136.708 155.166 136.244 155.166 135.674C155.166 135.11 155.082 134.649 154.916 134.291C154.752 133.933 154.507 133.67 154.181 133.501C153.856 133.331 153.454 133.247 152.977 133.247H151.948V138.117ZM158.858 139.5H157.128L159.764 131.864H161.845L164.477 139.5H162.747L160.834 133.609H160.775L158.858 139.5ZM158.75 136.498H162.837V137.759H158.75V136.498ZM164.172 133.195V131.864H170.444V133.195H168.106V139.5H166.51V133.195H164.172ZM171.86 139.5H170.13L172.766 131.864H174.847L177.479 139.5H175.749L173.836 133.609H173.777L171.86 139.5ZM171.752 136.498H175.839V137.759H171.752V136.498ZM182.208 131.864L184.054 137.665H184.125L185.974 131.864H187.764L185.131 139.5H183.051L180.415 131.864H182.208ZM190.298 131.864V139.5H188.683V131.864H190.298ZM191.544 139.5V138.542L195.355 133.195H191.536V131.864H197.383V132.822L193.569 138.169H197.39V139.5H191.544Z' fill='#AFC7D1'/>
+			<path d='M143.017 131.506L140.556 140.648H139.187L141.648 131.506H143.017ZM147.108 131.506L144.647 140.648H143.279L145.74 131.506H147.108Z' fill='#DCE2E7'/>
+			</svg>
+			
+			
+			"
+			RETURN
+			"data:image/svg+xml;utf8," & KodSVG
+			```
+		lineageTag: 5a9230c1-037f-46e1-9e32-40f1cee4787d
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Product Shares' =
+			
+			VAR _Header = "Product sales"
+			VAR _Subtitle = "Which products and brands generate the most sales?"
+			RETURN
+			Custom_Header_Ranking(
+			    _Header, --Header
+			    _Subtitle, --Subtitle
+			    "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21.21 15.89A10 10 0 1 1 8 2.83'></path><path d='M22 12A10 10 0 0 0 12 2v10z'></path></svg>", --Icon PATH (Pie Chart)
+			    "#006084", --Optional: Icon color (Granatowy)
+			    "#E6EFF3", --Optional: Icon background (Jasnoniebieskie tło)
+			    BLANK(), --Optional: Title color
+			    BLANK() --Optional: Subtitle color
+			)
+		displayFolder: KPI Cards
+		lineageTag: e255ce7d-d09e-4eb6-9220-9bc949645977
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Simple KPI SVG' = ```
+			
+			VAR _attRaw = [Quota Attainment % (Assigned)]
+			VAR _att = IF(ISBLANK(_attRaw), 0, _attRaw)
+			VAR _textVal = ROUND(_att * 100, 1) & "%"
+			RETURN
+			"data:image/svg+xml;utf8," & 
+			"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' width='100' height='100'>
+			  <circle cx='50' cy='50' r='45' fill='#2E7D32' />
+			  <text x='50' y='50' font-family='sans-serif' font-size='20' font-weight='bold' fill='#FFFFFF' text-anchor='middle' dominant-baseline='central'>" & _textVal & "</text>
+			</svg>"
+			```
+		displayFolder: KPI Cards
+		lineageTag: 4d6db244-5e44-4260-a908-bba12ed0fb04
+		dataCategory: ImageUrl
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column '_Global Measures'
+		dataType: string
+		lineageTag: 6fe8e748-6fff-45ec-9f1b-4f40f0fe108b
+		summarizeBy: none
+		sourceColumn: _Global Measures
+
+		annotation SummarizationSetBy = Automatic
+
+	partition '_Global Measures' = m
+		mode: import
+		source =
+				let
+					Source = ""
+				in
+					Source
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Text
+

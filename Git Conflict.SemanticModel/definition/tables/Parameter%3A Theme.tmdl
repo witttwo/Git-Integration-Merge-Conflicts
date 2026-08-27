@@ -1,0 +1,57 @@
+table 'Parameter: Theme'
+	lineageTag: 654a530d-4ec6-44cf-9c60-0e8db2ef0426
+
+	column 'Parameter: Theme'
+		lineageTag: 747b9310-80b9-44f0-804d-96b870264ac8
+		summarizeBy: none
+		sourceColumn: [Value1]
+		sortByColumn: 'Parameter: Theme Order'
+
+		relatedColumnDetails
+			groupByColumn: 'Parameter: Theme Fields'
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Parameter: Theme Fields'
+		isHidden
+		lineageTag: 4a5c55a7-87d5-4cad-b442-044d36f01cc4
+		summarizeBy: none
+		sourceColumn: [Value2]
+		sortByColumn: 'Parameter: Theme Order'
+
+		extendedProperty ParameterMetadata =
+				{
+				  "version": 3,
+				  "kind": 2
+				}
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Parameter: Theme Order'
+		isHidden
+		formatString: 0
+		lineageTag: 69d5c59f-d8aa-4ffa-9886-1014b878403d
+		summarizeBy: sum
+		sourceColumn: [Value3]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Value4
+		formatString: 0
+		lineageTag: 0ca10d4d-c654-489f-a287-ff287929caa2
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Value4]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Parameter: Theme' = calculated
+		mode: import
+		source =
+				{
+				    ("Mode 1", "Mode 1", 0,1),
+				    ("Mode 2", "Mode 2", 0,2)
+				}
+
+	annotation PBI_Id = 2d0a4985dabd4719a0cb2d8c21ae62e6
+

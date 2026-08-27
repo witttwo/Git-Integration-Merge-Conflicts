@@ -1,0 +1,15 @@
+createOrReplace
+
+	ref table '_Global Measures'
+
+		measure 'Selected PH Name' =
+				
+				SWITCH(
+				    TRUE(),
+				    HASONEVALUE(DimRep[RepName]) && ISFILTERED(DimRep[RepName]), SELECTEDVALUE(DimRep[RepName]),
+				    ISFILTERED(DimRep[RepName]), "Selected people",
+				    "Whole team"
+				)
+			displayFolder: Kilometrówka
+			lineageTag: db0f6adb-a89d-4372-936a-d38ff34097cc
+

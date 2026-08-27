@@ -1,0 +1,90 @@
+DEFINE
+    FUNCTION Custom_Header_Ranking = (
+    _MainTitle : string expr,
+    _Subtitle : string expr,
+    _IconSVG : string expr,
+    _IconColor : string expr,
+    _IconBg : string expr,
+    _TitleColor : string expr,
+    _SubtitleColor : string expr
+) =>
+
+VAR _titleFontColor = IF(ISBLANK(_TitleColor),"#333333",_TitleColor)
+VAR _subFontColor = IF(ISBLANK(_SubtitleColor),"#666666",_SubtitleColor)
+VAR _iconColorCode =  IF(ISBLANK(_IconColor),"#5D9D9D",_IconColor)
+VAR _IconBGColor = IF(ISBLANK(_IconBg),"#5D9D9D",_iconColorCode & "25")
+VAR _HtmlString = 
+"<!DOCTYPE html>
+<html style='margin:0; padding:0; overflow:hidden;'>
+<head>
+    <style>
+        * {
+            font-family: 'Trebuchet MS', Tahoma, Geneva, Verdana, sans-serif !important;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            background-color: transparent;
+        }
+        .main-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            padding: 5px;
+            box-sizing: border-box;
+            display: flex;
+            align-items: flex-start;
+        }
+        .icon-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 40px;
+            height: 40px;
+            background-color: " & _IconBGColor & ";
+            border-radius: 8px;
+            margin-right: 15px;
+            margin-top: 2px;
+            color: " & _iconColorCode & ";
+            flex-shrink: 0;
+        }
+        .icon-container svg {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+        }
+        .text-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+        .title {
+            font-size: 14px;
+            font-weight: 700;
+            color: "&_titleFontColor&";
+            margin-bottom: 2px;
+            line-height: 1.2;
+        }
+        .subtitle {
+            font-size: 11px;
+            color: "&_subFontColor&";
+            line-height: 1.3;
+        }
+    </style>
+</head>
+<body>
+    <div class='main-wrapper'>
+        <div class='icon-container'>
+            " & _IconSVG & "
+        </div>
+        <div class='text-container'>
+            <div class='title'>" & _MainTitle & "</div>
+            <div class='subtitle'>" & _Subtitle & "</div>
+        </div>
+    </div>
+</body>
+</html>"
+RETURN _HtmlString

@@ -1,0 +1,174 @@
+table DimDate
+	lineageTag: e52f53ed-9aa4-4b8d-a26d-44cc3f8a4b2f
+	dataCategory: Time
+
+	column Date
+		dataType: dateTime
+		isKey
+		formatString: mm/dd/yyyy
+		lineageTag: cb6ca94b-f17a-4e9b-a586-35c44dddccd8
+		summarizeBy: none
+		sourceColumn: Date
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Year
+		dataType: int64
+		formatString: 0
+		lineageTag: 69ffe847-4c0b-4083-880e-44535ae10da5
+		summarizeBy: none
+		sourceColumn: Year
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = User
+
+	column Quarter
+		dataType: int64
+		formatString: 0
+		lineageTag: 14157731-ad9b-4a41-93b1-4b4934de4bc3
+		summarizeBy: none
+		sourceColumn: Quarter
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = User
+
+	column Month
+		dataType: int64
+		formatString: 0
+		lineageTag: fd9600be-6108-4da6-a5ff-6c1672f3be5a
+		summarizeBy: none
+		sourceColumn: Month
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = User
+
+	column MonthName
+		dataType: string
+		lineageTag: 74f30a88-0297-491a-9825-ec3430141967
+		summarizeBy: none
+		sourceColumn: MonthName
+		sortByColumn: Month
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column MonthYear
+		dataType: string
+		lineageTag: cc26682e-d0cd-4cb8-b1ca-14d1e26ec6d3
+		summarizeBy: none
+		sourceColumn: MonthYear
+		sortByColumn: MonthYearKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column IsCurrentYear
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 2e45d446-f80d-4b17-a0fa-6bae764177a3
+		summarizeBy: none
+		sourceColumn: IsCurrentYear
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column IsPriorYear
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: bfcc7aec-aa81-4e79-b779-ac8b7dd44495
+		summarizeBy: none
+		sourceColumn: IsPriorYear
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column DateKey
+		dataType: int64
+		isHidden
+		formatString: 0
+		isAvailableInMdx: false
+		lineageTag: 23329b5c-9e79-4a08-91ef-539b16512137
+		summarizeBy: none
+		sourceColumn: DateKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column MonthYearKey
+		dataType: int64
+		formatString: 0
+		lineageTag: a9c1f0e4-2b8d-4e7a-9c12-3f5a6d8b1e02
+		summarizeBy: none
+		sourceColumn: MonthYearKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Quarter Label' = "Q" & FORMAT(DimDate[Quarter], "0") & " " & FORMAT(DimDate[Year], "0")
+		dataType: string
+		lineageTag: 302d2e23-080a-4745-b88c-03dfa81ee33d
+		sortByColumn: 'Quarter Sort'
+
+		changedProperty = SortByColumn
+
+		changedProperty = IsHidden
+
+	column 'Quarter Sort' = DimDate[Year] * 10 + DimDate[Quarter]
+		dataType: int64
+		lineageTag: 49e9ca34-2d5e-482a-abfa-4ce8ba124df0
+		summarizeBy: none
+
+		changedProperty = IsHidden
+
+	column yearAndMonthWithSlash = FORMAT(DimDate[Date],"yyyy/mm")
+		lineageTag: 3064291d-3e3b-4a30-b7da-bf49c63508e8
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	column MonthFullName = FORMAT(DimDate[Date],"MMMM")
+		lineageTag: f0670d91-9ceb-4e80-9dfb-f1b331d72e00
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	partition DimDate = m
+		mode: import
+		source =
+				let
+					StartDate = #date(2024, 1, 1),
+					EndDate   = #date(2026, 12, 31),
+					DateList  = List.Dates(StartDate, Duration.Days(EndDate - StartDate) + 1, #duration(1,0,0,0)),
+					T0  = Table.FromList(DateList, Splitter.SplitByNothing(), {"Date"}),
+					T1  = Table.TransformColumnTypes(T0, {{"Date", type date}}),
+					T2  = Table.AddColumn(T1,  "Year",         each Date.Year([Date]),                             Int64.Type),
+					T3  = Table.AddColumn(T2,  "Quarter",       each Date.QuarterOfYear([Date]),                    Int64.Type),
+					T4  = Table.AddColumn(T3,  "Month",         each Date.Month([Date]),                            Int64.Type),
+					T5  = Table.AddColumn(T4,  "MonthName",     each Date.ToText([Date], "MMM"),                    type text),
+					T6  = Table.AddColumn(T5,  "MonthYear",     each Date.ToText([Date], "yyyy-MM"),                type text),
+					T7  = Table.AddColumn(T6,  "IsCurrentYear", each [Year] = 2026,                                type logical),
+					T8  = Table.AddColumn(T7,  "IsPriorYear",   each [Year] = 2025,                                type logical),
+					T9  = Table.AddColumn(T8,  "DateKey",       each [Year]*10000 + [Month]*100 + Date.Day([Date]), Int64.Type),
+					T10 = Table.AddColumn(T9,  "MonthYearKey",  each [Year]*100 + [Month],                         Int64.Type)
+				in
+					T10
+
+	annotation MarkAsDateTable = true
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

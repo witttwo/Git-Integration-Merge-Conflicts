@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "Git Conflict"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "0756e198-6708-4b20-a5da-8cca02c7f5dd"
+  }
+}

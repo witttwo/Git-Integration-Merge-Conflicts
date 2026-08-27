@@ -1,0 +1,181 @@
+table FactQuota
+	lineageTag: 63bd39e2-753c-4456-94f6-4e01dfa9f1c2
+
+	measure 'Quota Attainment %' =
+			VAR _Result = DIVIDE([Net Sales], [Quota Total])
+			RETURN _Result
+		formatString: #,0.0%;-#,0.0%;#,0.0%
+		displayFolder: _Measures\Goals
+		lineageTag: 65b102e5-403d-4857-ac5d-4805c624913e
+
+		changedProperty = IsHidden
+
+	measure 'Net Sales vs Quota' =
+			VAR _Result = [Net Sales] - [Quota Total]
+			RETURN _Result
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		displayFolder: _Measures\Goals
+		lineageTag: b17bd63c-8424-451f-a30e-9fdab09ef186
+
+		changedProperty = IsHidden
+
+		annotation PBI_FormatHint = {"isCustom":true}
+
+	measure 'Quota Total' =
+			VAR _Result = SUM(FactQuota[SalesAmountQuota])
+			RETURN _Result
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		displayFolder: _Measures\Goals
+		lineageTag: 63e55f13-1336-458b-bff2-d0b3901ad9b1
+
+		changedProperty = IsHidden
+
+	measure 'Quota Attainment % (Assigned)' =
+			VAR _Sales = CALCULATE([Net Sales],  KEEPFILTERS(DimRep[RepKey] <> -1))
+			VAR _Quota = CALCULATE([Quota Total], KEEPFILTERS(DimRep[RepKey] <> -1))
+			RETURN DIVIDE(_Sales, _Quota)
+		formatString: #,0.0%;-#,0.0%;#,0.0%
+		displayFolder: _Measures\Goals
+		lineageTag: 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f
+
+		changedProperty = IsHidden
+
+	measure 'Quota Coverage Text' = VAR _A = FILTER(ALL(DimRep), DimRep[RepKey] <> -1) RETURN FORMAT(DIVIDE(CALCULATE([Net Sales], _A), 1000000), "$0.0M") & " / " & FORMAT(DIVIDE(CALCULATE([Quota Total], _A), 1000000), "$0.0M")
+		formatString: General
+		displayFolder: _Measures\Goals
+		lineageTag: c844bcec-22f6-4cba-81b1-454bc0715455
+
+		changedProperty = IsHidden
+
+	measure 'Quota Monthly' = DIVIDE(CALCULATE([Quota Total], ALLEXCEPT(DimDate, DimDate[Year])), 12)
+		formatString: \$#,0
+		displayFolder: _Measures\Goals
+		lineageTag: 9b903fac-49e8-4296-8036-a7b95b08023a
+
+		changedProperty = IsHidden
+
+	measure 'Quota 100' =
+			
+			IF([Quota Attainment %],
+			1)
+		displayFolder: _Measures\Goals
+		lineageTag: 3d6a2356-67fe-4766-9808-220a5cafd585
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Quota 0 Name' =
+			
+			IF(
+			    [Quota Attainment %],
+			    0
+			)
+		displayFolder: _Measures\Goals
+		lineageTag: 808be947-0274-42ed-a43d-e24311dfc856
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column EmployeeKey
+		dataType: double
+		isHidden
+		formatString: 0
+		isAvailableInMdx: false
+		lineageTag: 9af03235-b13a-4b3b-9425-1892cb9b321f
+		summarizeBy: none
+		sourceColumn: EmployeeKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column DateKey
+		dataType: double
+		isHidden
+		formatString: 0
+		isAvailableInMdx: false
+		lineageTag: a49eddd1-f5b6-419f-818b-40d67639fac9
+		summarizeBy: none
+		sourceColumn: DateKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column SalesAmountQuota
+		dataType: double
+		isHidden
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		isAvailableInMdx: false
+		lineageTag: d111652f-bc29-43ed-8901-ece5ffb15137
+		summarizeBy: none
+		sourceColumn: SalesAmountQuota
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isCustom":true}
+
+	partition FactQuota = m
+		mode: import
+		source =
+				let
+					Source = #table(
+						type table [EmployeeKey = number, DateKey = number, SalesAmountQuota = number],
+						{
+						{1, 20250101, 700000.0},
+						{1, 20250401, 700000.0},
+						{1, 20250701, 700000.0},
+						{1, 20251001, 700000.0},
+						{1, 20260101, 735000.0},
+						{1, 20260401, 735000.0},
+						{1, 20260701, 735000.0},
+						{1, 20261001, 735000.0},
+						{2, 20250101, 680000.0},
+						{2, 20250401, 680000.0},
+						{2, 20250701, 680000.0},
+						{2, 20251001, 680000.0},
+						{2, 20260101, 714000.0},
+						{2, 20260401, 714000.0},
+						{2, 20260701, 714000.0},
+						{2, 20261001, 714000.0},
+						{3, 20250101, 720000.0},
+						{3, 20250401, 720000.0},
+						{3, 20250701, 720000.0},
+						{3, 20251001, 720000.0},
+						{3, 20260101, 756000.0},
+						{3, 20260401, 756000.0},
+						{3, 20260701, 756000.0},
+						{3, 20261001, 756000.0},
+						{4, 20250101, 750000.0},
+						{4, 20250401, 750000.0},
+						{4, 20250701, 750000.0},
+						{4, 20251001, 750000.0},
+						{4, 20260101, 787500.0},
+						{4, 20260401, 787500.0},
+						{4, 20260701, 787500.0},
+						{4, 20261001, 787500.0},
+						{5, 20250101, 690000.0},
+						{5, 20250401, 690000.0},
+						{5, 20250701, 690000.0},
+						{5, 20251001, 690000.0},
+						{5, 20260101, 724500.0},
+						{5, 20260401, 724500.0},
+						{5, 20260701, 724500.0},
+						{5, 20261001, 724500.0},
+						{6, 20250101, 660000.0},
+						{6, 20250401, 660000.0},
+						{6, 20250701, 660000.0},
+						{6, 20251001, 660000.0},
+						{6, 20260101, 693000.0},
+						{6, 20260401, 693000.0},
+						{6, 20260701, 693000.0},
+						{6, 20261001, 693000.0}
+						}
+					)
+				in
+					Source
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

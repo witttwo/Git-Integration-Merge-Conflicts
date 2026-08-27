@@ -1,0 +1,49 @@
+table 'Parameter Field: Selection Pareto'
+	lineageTag: 877436c5-6af3-441b-8dbb-980b14d8ada1
+
+	column 'Parameter Field: Selection Pareto'
+		lineageTag: f2e79ed4-069d-4386-a5f5-867c266e01bb
+		summarizeBy: none
+		sourceColumn: [Value1]
+		sortByColumn: 'Parameter Field: Selection Pareto Order'
+
+		relatedColumnDetails
+			groupByColumn: 'Parameter Field: Selection Pareto Fields'
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Parameter Field: Selection Pareto Fields'
+		isHidden
+		lineageTag: c83f04c9-c504-4641-a3ee-f3899252ae1f
+		summarizeBy: none
+		sourceColumn: [Value2]
+		sortByColumn: 'Parameter Field: Selection Pareto Order'
+
+		extendedProperty ParameterMetadata =
+				{
+				  "version": 3,
+				  "kind": 2
+				}
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Parameter Field: Selection Pareto Order'
+		isHidden
+		formatString: 0
+		lineageTag: e07f5a7f-ac6d-40ed-892a-2d3ca125af4a
+		summarizeBy: sum
+		sourceColumn: [Value3]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Parameter Field: Selection Pareto' = calculated
+		mode: import
+		source =
+				{
+				    ("Territory", NAMEOF(DimDealer[Territory]), 0),
+				    ("Tier",NAMEOF(DimDealer[Tier]),1),
+				    ("Brand", NAMEOF(DimSku[Brand]), 2)
+				}
+
+	annotation PBI_Id = c3ba9b55134149f48f12415eafdb74f2
+

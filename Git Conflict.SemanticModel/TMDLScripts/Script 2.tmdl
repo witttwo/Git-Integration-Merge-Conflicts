@@ -1,0 +1,177 @@
+createOrReplace
+
+	ref table '_Global Measures'
+
+		measure HTML_KPI_Card_Dynamic = ```
+				
+				VAR BadgeText = [Selected PH Name]
+				VAR MainTitle = [Visits KPI Dashboard Header]
+				VAR MetricValue = 
+				    [Visits KPI Deviation]
+				    
+				
+				VAR _ID = "kpi_" & FORMAT(RANDBETWEEN(1000, 9999), "0")
+				
+				VAR ExplanationHeader = "ANALIZA ZMIENNOŚCI (CV)"
+				VAR ExplanationDesc = "Wskaźnik ten określa stabilność pracy PH na podstawie wizyt z ostatnich 6 miesięcy. Obliczany jako iloraz odchylenia standardowego i średniej. Im niższy wynik (bliższy 0%), tym bardziej powtarzalna i przewidywalna jest praca przedstawiciela."
+				
+				VAR MetricColor = 
+				    SWITCH(
+				        TRUE(),
+				        MetricValue > 0, "#0066cc",
+				        MetricValue < 0, "#d93025",
+				        "#666666"
+				    )
+				
+				VAR Subtitle = 
+[Visits KPI Dashboard Subtitle]
+				    
+				VAR FooterText =  [Visits KPI Dashboard Footer]
+				    
+				    
+				
+				VAR HtmlString = 
+				"<!DOCTYPE html>
+				<html style='margin:0; padding:0; overflow:hidden;'>
+				<head>
+				<style>
+				    html, body {
+				        margin: 0;
+				        padding: 0;
+				        height: 100%;
+				        width: 100%;
+				        overflow: hidden;
+				        background-color: transparent;
+				    }
+				    .main-wrapper {
+				        position: relative;
+				        width: 100%;
+				        height: 100%;
+				        padding: 3vw;
+				        box-sizing: border-box;
+				        font-family: 'Montserrat', Tahoma, Geneva, Verdana, sans-serif;
+				        overflow: hidden;
+				    }
+				    .badge {
+				        background-color: #0066cc;
+				        color: white;
+				        padding: 1vw 2.5vw;
+				        border-radius: 4vw;
+				        font-size: 3vw;
+				        font-weight: 700;
+				        display: inline-block;
+				        margin-bottom: 2vw;
+				    }
+				    .title {
+				        font-size: 4.5vw;
+				        font-weight: 700;
+				        color: #1a1a1a;
+				        margin-bottom: 1.5vw;
+				    }
+				    .metric-container {
+				        margin-bottom: 2vw;
+				    }
+				    .metric-value {
+				        font-size: 4vw;
+				        font-weight: 700;
+				        color: " & MetricColor & ";
+				        cursor: pointer;
+				        display: inline-block;
+				        position: relative;
+				        z-index: 5;
+				    }
+				    .metric-subtitle {
+				        font-size: 3.2vw;
+				        color: #666666;
+				    }
+				    .footer {
+				        font-size: 2.5vw;
+				        color: #666666;
+				    }
+				    .overlay {
+				        position: absolute;
+				        top: 0;
+				        left: 0;
+				        width: 100%;
+				        height: 100%;
+				        background: #0A1E41;
+				        color: #FFFFFF;
+				        padding: 5vw;
+				        box-sizing: border-box;
+				        display: flex;
+				        flex-direction: column;
+				        justify-content: center;
+				        transform: translateY(110%);
+				        visibility: hidden;
+				        transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.35s;
+				        z-index: 10;
+				        border-radius: 4vw;
+				        text-align: left;
+				    }
+				    .metric-value:hover ~ .overlay,
+				    .overlay:hover {
+				        transform: translateY(0);
+				        visibility: visible;
+				    }
+				    .ov-header {
+				        font-size: 2.2vw;
+				        font-weight: 700;
+				        opacity: 0.5;
+				        margin-bottom: 1.2vw;
+				        letter-spacing: 1px;
+				        text-transform: uppercase;
+				    }
+				    .ov-desc {
+				        font-size: 3vw;
+				        line-height: 1.4;
+				        font-weight: 400;
+				    }
+				</style>
+				</head>
+				<body>
+				    <div class='main-wrapper'>
+				        <div class='badge'>" & BadgeText & "</div>
+				        <div class='title'>" & MainTitle & "</div>
+				        <div class='metric-container'>
+				            <span class='metric-value' id='count-" & _ID & "'>0,0%</span>
+				            <div class='overlay'>
+				                <div class='ov-header'>" & ExplanationHeader & "</div>
+				                <div class='ov-desc'>" & ExplanationDesc & "</div>
+				            </div>
+				            <span class='metric-subtitle'>" & Subtitle & "</span>
+				        </div>
+				        <div class='footer'>" & FooterText & "</div>
+				    </div>
+				
+				    <script>
+				        (function() {
+				            const rawVal = '" & SUBSTITUTE(FORMAT(MetricValue, "0.0000"), ",", ".") & "';
+				            const target = parseFloat(rawVal);
+				            const element = document.getElementById('count-" & _ID & "');
+				            const duration = 1500;
+				            const start = performance.now();
+				
+				            function update(now) {
+				                const elapsed = now - start;
+				                const progress = Math.min(elapsed / duration, 1);
+				                const ease = 1 - Math.pow(1 - progress, 3);
+				                const current = target * ease * 100;
+				                
+				                const sign = current > 0 ? '+' : '';
+				                element.textContent = sign + current.toFixed(1).replace('.', ',') + '%';
+				
+				                if (progress < 1) {
+				                    requestAnimationFrame(update);
+				                }
+				            }
+				            requestAnimationFrame(update);
+				        })();
+				    </script>
+				</body>
+				</html>"
+				
+				RETURN HtmlString
+				```
+			displayFolder: Kilometrówka
+			lineageTag: facd5e16-bf71-45e0-b40e-32f7ed6a70b3
+

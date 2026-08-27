@@ -1,0 +1,28 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	discourageImplicitMeasures
+	sourceQueryCulture: es-ES
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 0
+
+annotation PBI_ProTooling = ["DevMode","TMDLView_Desktop","DaxQueryView_Desktop","MCP-PBIModeling"]
+
+annotation PBI_QueryOrder = ["DimDate","DimDealer","DimSku","DimRep","FactSales","FactQuota","_Global Measures"]
+
+ref table DimDate
+ref table DimDealer
+ref table DimSku
+ref table DimRep
+ref table FactSales
+ref table FactQuota
+ref table TimeIntelligence
+ref table '_Global Measures'
+ref table 'Parameter: Theme'
+ref table 'Parameter Field: Selection Pareto'
+
+ref cultureInfo en-US
+

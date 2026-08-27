@@ -1,0 +1,35 @@
+DEFINE
+    FUNCTION Deviation_6_Months = (
+	_value: decimal expr,
+	_avgValue: expr
+) =>
+
+VAR _Wizyty  = _value
+    VAR _MaxDate = CALCULATE(
+                       MAX(DimDate[Date]),
+                       ALL(FactSales), ALL(DimDate),
+                       ALL(DimDealer), ALL(DimSku), ALL(DimRep)
+                   )
+    VAR _Period  = DATESINPERIOD(DimDate[Date], _MaxDate, -6, MONTH)
+    VAR _MonthlyData =
+        CALCULATETABLE(
+            ADDCOLUMNS(
+                VALUES(DimDate[MonthYear]),
+                "@SredniaPH", _avgValue
+            ),
+            _Period
+        )
+    VAR _FilteredData = FILTER(_MonthlyData, [@SredniaPH] > 0)
+    VAR _MonthsCount  = COUNTROWS(_FilteredData)
+    VAR _Srednia      = AVERAGEX(_FilteredData, [@SredniaPH])
+    VAR _Odchylenie   = STDEVX.S(_FilteredData, [@SredniaPH])
+    RETURN
+    IF(
+        NOT(ISBLANK(_Wizyty)),
+        IF(
+            _MonthsCount > 1,
+            DIVIDE(_Odchylenie, _Srednia)
+        )
+    )
+
+EVALUATE

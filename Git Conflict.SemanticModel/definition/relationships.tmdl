@@ -1,0 +1,24 @@
+relationship 3c69f3d9-cdc7-4e00-afbb-27e1dc471164
+	fromColumn: FactSales.DateKey
+	toColumn: DimDate.DateKey
+
+relationship ec89b46e-d086-4121-a57f-e2c521f6be16
+	fromColumn: FactSales.ResellerKey
+	toColumn: DimDealer.DealerKey
+
+relationship 1cf44279-c417-494e-b003-a6e09dbc7c0d
+	fromColumn: FactSales.ProductKey
+	toColumn: DimSku.SkuKey
+
+relationship 74a793c4-cdf0-4a55-bf82-e7468181e36e
+	fromColumn: FactSales.EmployeeKey
+	toColumn: DimRep.RepKey
+
+relationship 93c74f76-3237-42de-a7f4-744d70e6fd1b
+	fromColumn: FactQuota.DateKey
+	toColumn: DimDate.DateKey
+
+relationship 5a1f7e8c-2b04-4d3a-9c11-8e57b62f0a4d
+	fromColumn: FactQuota.EmployeeKey
+	toColumn: DimRep.RepKey
+

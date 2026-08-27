@@ -1,0 +1,147 @@
+table DimDealer
+	lineageTag: 15114643-ea30-4874-a6de-2a9c34c60ee7
+
+	column DealerKey
+		dataType: double
+		isHidden
+		isKey
+		formatString: 0
+		isAvailableInMdx: false
+		lineageTag: 73bcc1bb-1ad7-425d-88be-78e791dfc3cb
+		summarizeBy: none
+		sourceColumn: DealerKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column DealerName
+		dataType: string
+		lineageTag: 185950bc-7f1c-4c1b-9ca8-824f7c9aaced
+		summarizeBy: none
+		sourceColumn: DealerName
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column Territory
+		dataType: string
+		lineageTag: 48fef52f-2aa2-4ace-b95f-b70443bcf159
+		summarizeBy: none
+		sourceColumn: Territory
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column Region
+		dataType: string
+		lineageTag: 3435b0b7-cff2-4992-9ea2-7e7f0c8fe423
+		summarizeBy: none
+		sourceColumn: Region
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column Tier
+		dataType: string
+		lineageTag: 6c1d637e-ebbe-422b-92d9-da0513bdce92
+		summarizeBy: none
+		sourceColumn: Tier
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column Tenure
+		dataType: double
+		formatString: 0.0
+		lineageTag: 7e3c4f12-9a8b-4d5e-b2a1-1c4d8f02a103
+		summarizeBy: none
+		sourceColumn: Tenure
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isCustom":true}
+
+	column CreditTerms
+		dataType: string
+		lineageTag: 9b6e2d4f-3c1a-4f7d-8e29-2a5b6c7d8e91
+		summarizeBy: none
+		sourceColumn: CreditTerms
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column PaymentScore
+		dataType: double
+		formatString: 0
+		lineageTag: c4a8d1e5-7b29-4e63-9c14-3f8d2e1a4b7c
+		summarizeBy: none
+		sourceColumn: PaymentScore
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column AccountType
+		dataType: string
+		lineageTag: e2f5c8a1-4d6b-4729-a3c5-6b1e9d2f7a48
+		summarizeBy: none
+		sourceColumn: AccountType
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	partition DimDealer = m
+		mode: import
+		source =
+				let
+					Source = #table(
+						type table [DealerKey = number, DealerName = text, Territory = text, Region = text, Tier = text, Tenure = number, CreditTerms = text, PaymentScore = number, AccountType = text],
+						{
+						{1, "Suncoast Distributors", "Florida", "Southeast", "Platinum", 8.0, "Net 30", 95, "Distributor"},
+						{2, "Peach State Supply", "Georgia", "Southeast", "Platinum", 7.5, "Net 30", 92, "Distributor"},
+						{3, "Blue Ridge Trading", "North Carolina", "Southeast", "Platinum", 7.0, "Net 45", 88, "Multi-line"},
+						{4, "Pacific Rim Wholesale", "California", "West Coast", "Platinum", 8.5, "Net 30", 97, "Distributor"},
+						{5, "Cascade Valley Supply", "Washington", "West Coast", "Platinum", 6.5, "Net 30", 91, "Distributor"},
+						{6, "Silver Star Distributors", "California", "West Coast", "Platinum", 7.0, "Net 45", 89, "Multi-line"},
+						{7, "Gulf Coast Trading", "Florida", "Southeast", "Gold", 5.5, "Net 45", 85, "Specialty Retailer"},
+						{8, "Music City Wholesale", "Tennessee", "Southeast", "Gold", 6.0, "Net 30", 87, "Multi-line"},
+						{9, "Magnolia Distributors", "Mississippi", "Southeast", "Gold", 4.5, "Net 60", 78, "Distributor"},
+						{10, "Golden State Traders", "California", "West Coast", "Gold", 5.0, "Net 45", 83, "Specialty Retailer"},
+						{11, "Evergreen Supply Co", "Oregon", "West Coast", "Gold", 5.5, "Net 30", 86, "Distributor"},
+						{12, "Desert Sun Trading", "Nevada", "West Coast", "Gold", 4.0, "Net 60", 75, "Multi-line"},
+						{13, "Tidewater Distributors", "Virginia", "Southeast", "Silver", 3.5, "Net 45", 82, "Specialty Retailer"},
+						{14, "Cherokee Trading", "Tennessee", "Southeast", "Silver", 4.0, "Net 60", 72, "Multi-line"},
+						{15, "Alabama Wholesale", "Alabama", "Southeast", "Silver", 3.0, "Net 60", 70, "Distributor"},
+						{16, "Northwest Traders", "Washington", "West Coast", "Silver", 3.5, "Net 45", 80, "Specialty Retailer"},
+						{17, "Coyote Supply", "Arizona", "West Coast", "Silver", 2.5, "Net 60", 68, "Multi-line"},
+						{18, "Beehive Wholesale", "Utah", "West Coast", "Silver", 3.0, "Net 60", 71, "Distributor"},
+						{19, "Palmetto Distributors", "South Carolina", "Southeast", "Bronze", 1.5, "Net 60", 65, "Specialty Retailer"},
+						{20, "Tar Heel Trading", "North Carolina", "Southeast", "Bronze", 2.0, "Net 60", 63, "Multi-line"},
+						{21, "Crescent City Supply", "Georgia", "Southeast", "Bronze", 1.8, "Net 60", 67, "Distributor"},
+						{22, "SoCal Traders", "California", "West Coast", "Bronze", 2.0, "Net 60", 64, "Specialty Retailer"},
+						{23, "High Desert Supply", "New Mexico", "West Coast", "Bronze", 1.5, "Net 60", 62, "Multi-line"},
+						{24, "Treasure State Trading", "Montana", "West Coast", "Bronze", 1.8, "Net 60", 66, "Distributor"},
+						{25, "Keystone Supply", "Virginia", "Southeast", "Platinum", 6.0, "Net 30", 90, "Distributor"},
+						{26, "First Coast Trading", "Florida", "Southeast", "Gold", 4.5, "Net 45", 84, "Multi-line"},
+						{27, "Oregon Trail Supply", "Oregon", "West Coast", "Silver", 2.8, "Net 60", 74, "Specialty Retailer"},
+						{28, "Lone Star Distributors", "Texas", "Southeast", "Platinum", 7.5, "Net 30", 93, "Distributor"},
+						{29, "Silicon Valley Supply", "California", "West Coast", "Gold", 4.8, "Net 45", 86, "Specialty Retailer"},
+						{30, "Rocky Mountain Traders", "Idaho", "West Coast", "Bronze", 1.6, "Net 60", 61, "Multi-line"}
+						}
+					)
+				in
+					Source
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

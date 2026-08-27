@@ -1,0 +1,58 @@
+table DimRep
+	lineageTag: af6fea4f-5a15-425a-9729-c406a7231a1d
+
+	column RepKey
+		dataType: double
+		isKey
+		formatString: 0
+		lineageTag: c22cf863-301e-48ca-8a86-f5e5239fffb8
+		summarizeBy: none
+		sourceColumn: RepKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column RepName
+		dataType: string
+		lineageTag: daf0afdd-46f2-4a28-97df-fbd23ba6dab9
+		summarizeBy: none
+		sourceColumn: RepName
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column Region
+		dataType: string
+		lineageTag: 256fcb6f-50f3-4327-899a-5d16a61ad643
+		summarizeBy: none
+		sourceColumn: Region
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	partition DimRep = m
+		mode: import
+		source =
+				let
+					Source = #table(
+						type table [RepKey = number, RepName = text, Region = text],
+						{
+						{-1, "Unassigned", "N/A"},
+						{1, "Jessica Martinez", "Southeast"},
+						{2, "David Chen", "Southeast"},
+						{3, "Amanda Torres", "Southeast"},
+						{4, "Michael Wright", "West Coast"},
+						{5, "Sarah Johnson", "West Coast"},
+						{6, "Kevin Park", "West Coast"}
+						}
+					)
+				in
+					Source
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

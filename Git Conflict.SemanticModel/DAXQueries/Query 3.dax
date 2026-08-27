@@ -1,0 +1,69 @@
+DEFINE
+    /// Pure-SVG imageUrl version of KPI_Ultimate_TwoSubs. Returns data:image/svg+xml data URI.
+    FUNCTION KPI_SVG_TwoSubs = (
+        _TitleTxt : string expr,
+        _ValueKPI : expr,
+        _SuffixTxt : string expr,
+        _IconPathD : string expr,
+        _BgColor : string expr,
+        _FORMATDark : string expr,
+        _FORMATGrey : string expr,
+        _Accent : string expr,
+        _BorderColor : string expr,
+        _Sub1LabelTxt : string expr,
+        _Sub1ValueTxt : string expr,
+        _Sub1ColorTxt : string expr,
+        _Sub2LabelTxt : string expr,
+        _Sub2ValueTxt : string expr,
+        _Sub2ColorTxt : string expr
+    ) =>
+
+-- 1. KOLORY — raw i pre-encoded (#→%23 dla data URI)
+VAR _bgR  = IF(ISBLANK(_BgColor),     "#FFFFFF", _BgColor)
+VAR _dkR  = IF(ISBLANK(_FORMATDark),    "#0A1E41", _FORMATDark)
+VAR _gyR  = IF(ISBLANK(_FORMATGrey),    "#5F6B7C", _FORMATGrey)
+VAR _acR  = IF(ISBLANK(_Accent),      "#6A1B9A", _Accent)
+VAR _bdR  = IF(ISBLANK(_BorderColor), "#E5E7EB", _BorderColor)
+VAR _c1R  = IF(ISBLANK(_Sub1ColorTxt), _gyR, _Sub1ColorTxt)
+VAR _c2R  = IF(ISBLANK(_Sub2ColorTxt), _gyR, _Sub2ColorTxt)
+VAR _ico  = IF(ISBLANK(_IconPathD),    "M12 12h.01", _IconPathD)
+VAR _bg   = SUBSTITUTE(_bgR,  "#", "%23")
+VAR _dk   = SUBSTITUTE(_dkR,  "#", "%23")
+VAR _gy   = SUBSTITUTE(_gyR,  "#", "%23")
+VAR _ac   = SUBSTITUTE(_acR,  "#", "%23")
+VAR _bd   = SUBSTITUTE(_bdR,  "#", "%23")
+VAR _c1   = SUBSTITUTE(_c1R,  "#", "%23")
+VAR _c2   = SUBSTITUTE(_c2R,  "#", "%23")
+
+-- 2. WARTOŚCI — pre-encode % żeby nie psuć data URI
+VAR _v1 = SUBSTITUTE(_Sub1ValueTxt, "%", "%25")
+VAR _v2 = SUBSTITUTE(_Sub2ValueTxt, "%", "%25")
+
+-- 3. FORMATOWANIE LICZBY — separator tysiąc = spacja
+VAR _rawV = _ValueKPI
+VAR _absV = ABS(INT(_rawV))
+VAR _gi   = INT(_absV / 1000000000)
+VAR _r1   = _absV - _gi * 1000000000
+VAR _mi   = INT(_r1 / 1000000)
+VAR _r2   = _r1 - _mi * 1000000
+VAR _ti   = INT(_r2 / 1000)
+VAR _ui   = _r2 - _ti * 1000
+VAR _fmt  =
+    SWITCH(TRUE(),
+        _gi > 0, FORMAT(_gi,"0") & " " & FORMAT(_mi,"000") & " " & FORMAT(_ti,"000") & " " & FORMAT(_ui,"000"),
+        _mi > 0, FORMAT(_mi,"0") & " " & FORMAT(_ti,"000") & " " & FORMAT(_ui,"000"),
+        _ti > 0, FORMAT(_ti,"0") & " " & FORMAT(_ui,"000"),
+        FORMAT(_absV,"0")
+    )
+VAR _vd = IF(_rawV < 0, "-" & _fmt, _fmt)
+
+-- 4. ROZMIAR CZCIONKI (identyczne progi jak KPI_Ultimate_TwoSubs)
+VAR _fs =
+    SWITCH(TRUE(),
+        _absV >= 1000000, "28",
+        _absV >= 100000,  "32",
+        "36"
+    )
+
+RETURN
+"data:image/svg+xml,<svg viewBox='0 0 380 210' xmlns='http://www.w3.org/2000/svg'><defs><clipPath id='cp'><rect x='0' y='0' width='380' height='210' rx='20'/></clipPath></defs><g clip-path='url(%23cp)'><rect x='0' y='0' width='380' height='210' fill='" & _bg & "'/><circle cx='336' cy='52' r='28' fill='" & _ac & "' fill-opacity='0.08'/><g transform='translate(322,38) scale(1.167)'><path d='" & _ico & "' fill='none' stroke='" & _ac & "' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></g><text x='22' y='36' font-family='Montserrat,Segoe UI,sans-serif' font-size='14' font-weight='500' fill='" & _gy & "'>" & _TitleTxt & "</text><text x='22' y='76' font-family='Montserrat,Segoe UI,sans-serif' fill='" & _dk & "'><tspan font-size='" & _fs & "' font-weight='700'>" & _vd & "</tspan><tspan font-size='16' font-weight='600' dx='5'>" & _SuffixTxt & "</tspan></text><line x1='22' y1='110' x2='358' y2='110' stroke='" & _bd & "' stroke-width='1'/><text x='22' y='152' font-family='Montserrat,Segoe UI,sans-serif' font-size='15'><tspan fill='" & _gy & "'>" & _Sub1LabelTxt & " </tspan><tspan fill='" & _c1 & "' font-weight='700'>" & _v1 & "</tspan></text><text x='22' y='180' font-family='Montserrat,Segoe UI,sans-serif' font-size='15'><tspan fill='" & _gy & "'>" & _Sub2LabelTxt & " </tspan><tspan fill='" & _c2 & "' font-weight='700'>" & _v2 & "</tspan></text></g></svg>"

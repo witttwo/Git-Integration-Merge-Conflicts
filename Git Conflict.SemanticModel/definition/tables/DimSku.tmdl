@@ -1,0 +1,95 @@
+table DimSku
+	lineageTag: c0b8b985-7634-4f17-b255-50fba14b3a8c
+
+	column SkuKey
+		dataType: double
+		isKey
+		formatString: 0
+		isAvailableInMdx: false
+		lineageTag: b1198016-fa9a-49a1-a752-f9f9558f7a34
+		summarizeBy: none
+		sourceColumn: SkuKey
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column SkuName
+		dataType: string
+		lineageTag: 52be0836-6cbe-4f67-95d9-191944183952
+		summarizeBy: none
+		sourceColumn: SkuName
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column Category
+		dataType: string
+		lineageTag: e8588320-2602-4fdb-b8d8-c22e516ed5be
+		summarizeBy: none
+		sourceColumn: Category
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column Brand
+		dataType: string
+		lineageTag: 7333aaec-f352-4b5d-876e-b824e60bf326
+		summarizeBy: none
+		sourceColumn: Brand
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column ListPrice
+		dataType: double
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: a9bdeccc-bb57-4d32-bb56-88db110cc92c
+		summarizeBy: none
+		sourceColumn: ListPrice
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isCustom":true}
+
+	partition DimSku = m
+		mode: import
+		source =
+				let
+					Source = #table(
+						type table [SkuKey = number, SkuName = text, Category = text, Brand = text, ListPrice = number],
+						{
+						{1, "Atlas Pro 500", "Components", "Atlas", 249.99},
+						{2, "Atlas Elite 700", "Components", "Atlas", 399.99},
+						{3, "Atlas Compact 200", "Accessories", "Atlas", 89.99},
+						{4, "Meridian X1", "Components", "Meridian", 299.99},
+						{5, "Meridian X3", "Components", "Meridian", 549.99},
+						{6, "Meridian Lite", "Accessories", "Meridian", 79.99},
+						{7, "Vanguard Series A", "Components", "Vanguard", 199.99},
+						{8, "Vanguard Series B", "Components", "Vanguard", 349.99},
+						{9, "Vanguard Mini", "Accessories", "Vanguard", 59.99},
+						{10, "Cascade Flow 100", "Components", "Cascade", 179.99},
+						{11, "Cascade Flow 300", "Components", "Cascade", 329.99},
+						{12, "Cascade Trim", "Accessories", "Cascade", 49.99},
+						{13, "Helios H1", "Components", "Helios", 279.99},
+						{14, "Helios H3", "Components", "Helios", 479.99},
+						{15, "Helios Smart", "Components", "Helios", 649.99},
+						{16, "Forge Industrial", "Components", "Forge", 899.99},
+						{17, "Forge Pro", "Components", "Forge", 599.99},
+						{18, "Forge Lite", "Accessories", "Forge", 149.99},
+						{19, "Atlas Bundle Pack", "Bundles", "Atlas", 699.99},
+						{20, "Meridian Bundle", "Bundles", "Meridian", 799.99}
+						}
+					)
+				in
+					Source
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

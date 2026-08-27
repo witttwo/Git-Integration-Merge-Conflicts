@@ -1,0 +1,61 @@
+table TimeIntelligence
+	lineageTag: 88008f78-71f3-478e-ace9-c2d0cb450730
+
+	calculationGroup
+		precedence: 100
+
+		calculationItem Current = SELECTEDMEASURE()
+
+		calculationItem 'Prior Year' =
+				CALCULATE(
+				    SELECTEDMEASURE(),
+				    PREVIOUSYEAR(DimDate[Date])
+				)
+
+		calculationItem 'YoY %' =
+				VAR _Curr = SELECTEDMEASURE()
+				VAR _Prior =
+				    CALCULATE(SELECTEDMEASURE(), PREVIOUSYEAR(DimDate[Date]))
+				RETURN
+				    DIVIDE(_Curr - _Prior, _Prior)
+
+			formatStringDefinition = "0.0%;-0.0%;0%"
+
+		calculationItem 'YoY Δ' =
+				VAR _Curr = SELECTEDMEASURE()
+				VAR _Prior =
+				    CALCULATE(SELECTEDMEASURE(), PREVIOUSYEAR(DimDate[Date]))
+				RETURN
+				    _Curr - _Prior
+
+		calculationItem 'MoM %' =
+				VAR _Curr = SELECTEDMEASURE()
+				VAR _Prior =
+				    CALCULATE(SELECTEDMEASURE(), PREVIOUSMONTH(DimDate[Date]))
+				RETURN
+				    DIVIDE(_Curr - _Prior, _Prior)
+
+			formatStringDefinition = "0.0%;-0.0%;0%"
+
+	column Name
+		dataType: string
+		lineageTag: 0154f442-d225-4768-b44f-aa6375500f5b
+		summarizeBy: none
+		sourceColumn: Name
+		sortByColumn: Ordinal
+
+		annotation SummarizationSetBy = Automatic
+
+	column Ordinal
+		dataType: int64
+		formatString: 0
+		lineageTag: 4f28eaf9-466f-4fb9-8c23-aa3a708f57fd
+		summarizeBy: none
+		sourceColumn: Ordinal
+
+		annotation SummarizationSetBy = Automatic
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

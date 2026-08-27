@@ -1,0 +1,42 @@
+createOrReplace
+
+	ref table '_Global Measures'
+
+		measure 'Visits KPI Dashboard Subtitle' = ```
+				
+				VAR _CV = [Visits KPI Deviation]
+				VAR _Wizyty = [Net Sales]
+				VAR _Trend = [Trend_Wizyt_6M_Pct]
+				VAR _CvDesc = 
+				    SWITCH(
+				        TRUE(),
+				        ISBLANK(_CV), "Zbyt mały zakres pełnych m-cy do obliczeń",
+				        _CV <= 0.20, "Zmienność w normie (stabilne obciążenie m/m)",
+				        _CV <= 0.40, "Naturalna dynamika (umiarkowane odchylenia m/m)",
+				        "Niestabilne tempo (praca 'zrywami' m/m)"
+				    )
+				VAR _TrendDesc = 
+				    SWITCH(
+				        TRUE(),
+				        ISBLANK(_Trend), "",
+				        _Trend >= 0.10, " i silny trend rosnący",
+				        _Trend >= 0.05, " i wyraźny trend rosnący",
+				        _Trend >= 0.02, " i łagodny trend rosnący",
+				        _Trend <= -0.10, " oraz silny zjazd aktywności",
+				        _Trend <= -0.05, " oraz wyraźny trend spadkowy",
+				        _Trend <= -0.02, " oraz łagodny trend spadkowy",
+				        " i stabilna aktywność"
+				    )
+				RETURN
+				IF(
+				    NOT(ISBLANK(_Wizyty)),
+				    IF(
+				        ISBLANK(_CV),
+				        _CvDesc,
+				        _CvDesc & _TrendDesc
+				    )
+				)
+				```
+			displayFolder: Kilometrówka
+			lineageTag: f3dd515c-beab-4a6c-8bcc-8ecde87b2177
+
