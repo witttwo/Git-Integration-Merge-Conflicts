@@ -106,9 +106,9 @@ $readmeDev = @'
 
 Kiedy dwie gałęzie zmieniają to samo miejsce w pliku, Git nie wie, którą wersję zostawić, i prosi Cię o decyzję. Poniżej najważniejsze zasady z warsztatu.
 
-## Accept Incoming Change
+## Kiedy wziąć wersję z zewnątrz
 
-Bierze wersję z gałęzi, którą wciągasz. W ćwiczeniu to `dev_XX`, bo wpisujesz `git merge dev_XX`. W dokumentacji Gita nazywa się to "theirs". Wybierz, gdy zmiany z zewnątrz są nowsze albo lepsze od Twoich.
+Przycisk "Accept Incoming Change" bierze wersję z gałęzi, którą wciągasz. W ćwiczeniu to `dev_XX`, bo wpisujesz `git merge dev_XX`. W dokumentacji Gita nazywa się to "theirs". Wybierz, gdy zmiany z zewnątrz są nowsze albo lepsze od Twoich.
 
 ## Gdy obie wersje są złe
 
@@ -809,9 +809,9 @@ $readmeBase = @'
 
 Kiedy dwie gałęzie zmieniają to samo miejsce w pliku, Git nie wie, którą wersję zostawić, i prosi Cię o decyzję. Poniżej najważniejsze zasady z warsztatu.
 
-## Accept Current Change
+## Kiedy zostawić swoją wersję
 
-Zostawia wersję z gałęzi, na której stoisz. W ćwiczeniu to `baza_XX`. W dokumentacji Gita nazywa się to "ours". Wybierz, gdy Twoja wersja jest poprawna i nie chcesz, żeby nadpisało ją coś z zewnątrz.
+Przycisk "Accept Current Change" zostawia wersję z gałęzi, na której stoisz. W ćwiczeniu to `baza_XX`. W dokumentacji Gita nazywa się to "ours". Wybierz, gdy Twoja wersja jest poprawna i nie chcesz, żeby nadpisało ją coś z zewnątrz.
 
 ## Przerwanie merge'a
 
