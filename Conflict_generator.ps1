@@ -1,37 +1,103 @@
-$i = Read-Host "Podaj swoje inicjaly"
+﻿# ==========================================
+# GENERATOR KONFLIKTU - warsztat "Git Integration: Merge Conflicts"
+# Uruchomienie (terminal w VS Code, w folderze repo):
+#   .\Conflict_generator.ps1
+# W razie blokady Windowsa:
+#   powershell -ExecutionPolicy Bypass -File .\Conflict_generator.ps1
+# ==========================================
+
+Set-Location $PSScriptRoot
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+function Read-Text($path) { [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot $path), $utf8NoBom) }
+function Write-Text($path, $text) { [System.IO.File]::WriteAllText((Join-Path $PSScriptRoot $path), $text, $utf8NoBom) }
+
+# Podmienia dokładnie jedno wystąpienie; jeśli wzorca nie ma, przerywa skrypt (zamiast cicho nic nie zmienić)
+function Set-Once($text, $find, $replace) {
+    $idx = $text.IndexOf($find)
+    if ($idx -lt 0) { throw "Nie znaleziono w pliku fragmentu: $find" }
+    return $text.Substring(0, $idx) + $replace + $text.Substring($idx + $find.Length)
+}
+
+# ==========================================
+# 0. WALIDACJA
+# ==========================================
+if (-not (git rev-parse --is-inside-work-tree 2>$null)) {
+    Write-Host "To nie jest repozytorium Git. Uruchom skrypt w folderze sklonowanego repo." -ForegroundColor Red; exit 1
+}
+if (Test-Path (Join-Path (git rev-parse --git-dir) "MERGE_HEAD")) {
+    Write-Host "Trwa niedokończony merge. Najpierw: git merge --abort  (albo dokończ go commitem)." -ForegroundColor Red; exit 1
+}
+if (git status --porcelain) {
+    Write-Host "Masz niezapisane zmiany. Zrób commit albo: git stash  - i uruchom skrypt ponownie." -ForegroundColor Red; exit 1
+}
+
+do {
+    $i = (Read-Host "Podaj swoje inicjaly (np. MJ)").Trim()
+} while ($i -notmatch '^[A-Za-z0-9_-]{1,10}$')
+
 $devBranch = "dev_$i"
 $baseBranch = "baza_$i"
 
-# 1. ZAPAMIĘTANIE PUNKTU STARTOWEGO (Gwarantuje, że nie ruszymy obecnej gałęzi)
-$startCommit = git rev-parse HEAD
+# 1. PUNKT STARTOWY (obie gałęzie powstają z tego samego commita)
+# Zawsze gałąź 'workshop', więc skrypt można odpalić ponownie także po 'git merge --abort'
+$startCommit = git rev-parse --verify --quiet workshop
+if (-not $startCommit) { $startCommit = git rev-parse --verify --quiet origin/workshop }
+if (-not $startCommit) {
+    Write-Host "Nie widzę gałęzi 'workshop'. Wykonaj: git fetch  oraz  git checkout workshop" -ForegroundColor Red; exit 1
+}
 
 # ==========================================
-# 2. ZABEZPIECZENIE ORYGINAŁÓW
+# 2. ORYGINAŁY
 # ==========================================
 $tmdlPath = "Git Conflict.SemanticModel\definition\tables\_Global Measures.tmdl"
 $visOldPath = "Git Conflict.Report\definition\pages\7a1007e13b28c6d51010\visuals\ff390bfdbc0aea10ab08\visual.json"
-$tmdlOryginal = Get-Content $tmdlPath -Raw -Encoding UTF8
-$visOryginal = Get-Content $visOldPath -Raw -Encoding UTF8
 
-$regexTmdl1 = '(?<=_Consistent && NOT \( _Falling \), )".*?"'
-$regexTmdl2 = '(?<=VAR _Header = )".*?"'
-$regexSVG = "<svg xmlns='http://www.w3.org/2000/svg'.*?</svg>"
-$noweSVG = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-align-end-horizontal-icon lucide-align-end-horizontal'><rect width='6' height='16' x='4' y='2' rx='2'/><rect width='6' height='9' x='14' y='9' rx='2'/><path d='M22 22H2'/></svg>"
+# Fragmenty, które zmieniamy. Każdy konflikt ma INNY tekst i inną akcję do przećwiczenia:
+#   KONFLIKT 1  miara 'HTML_KPI_Card_Dynamic' (etykieta) -> Accept Current
+#   KONFLIKT 2  miara 'Reps Headaer' (nagłówek)  -> ręczna edycja (własny tekst)
+#   KONFLIKT 3  visual.json (kolor + kształt markera, 2 bloki) -> Accept Incoming w obu
+#   KONFLIKT 4  README.md                        -> Accept Both
+#   BEZ KONFLIKTU: 'Sales Shares' zmienia tylko DEV, 'Product Shares' zmienia tylko BAZA -> Git scala sam
+$consistencyOld = '_Consistent && NOT ( _Falling ), "High sales consistency ✔"'
+$repsHeaderOld = 'VAR _Header = "Sales reps"'
+$salesShareHeaderOld = 'VAR _Header = "Sales share"'
+$productSubtitleOld = 'VAR _Subtitle = "Which products and brands generate the most sales?"'
+$markerAnchor = '(?s)("markerSize":\s*\{\s*"expr":\s*\{\s*"Literal":\s*\{\s*"Value":\s*"7D"\s*\}\s*\}\s*\})'
 
 # ==========================================
-# 3. GAŁĄŹ DEV (Tworzona ze startCommit)
+# 3. GAŁĄŹ DEV (to, co "przychodzi" = Incoming)
 # ==========================================
 git checkout -B $devBranch $startCommit 2>$null
 
-$tmdlDev = $tmdlOryginal -replace $regexTmdl1, '"OMG test ✔"'
-$tmdlDev = $tmdlDev -replace $regexTmdl2, '"GIT Conflict Test"'
-$tmdlDev = $tmdlDev -replace $regexSVG, $noweSVG
-Set-Content -Path $tmdlPath -Value $tmdlDev -Encoding UTF8
+# Oryginały czytamy dopiero po przejściu na punkt startowy (a nie z gałęzi, na której ktoś akurat stał)
+$tmdlOryginal = Read-Text $tmdlPath
+$visOryginal = Read-Text $visOldPath
+
+$tmdlDev = $tmdlOryginal
+$tmdlDev = Set-Once $tmdlDev $consistencyOld '_Consistent && NOT ( _Falling ), "🚀 Rock-solid sales (DEV)"'
+$tmdlDev = Set-Once $tmdlDev $repsHeaderOld 'VAR _Header = "Sales Team Leaderboard"'
+$tmdlDev = Set-Once $tmdlDev $salesShareHeaderOld 'VAR _Header = "Territory Pareto 80/20"'
+Write-Text $tmdlPath $tmdlDev
 
 $visDev = $visOryginal.Replace('2.11.0/schema.json', '2.12.0/schema.json')
-$markerDevPayload = '$1, "markerColor": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 7, "Percent": 0.2 } } } } }'
-$visDev = $visDev -replace '(?s)("markerSize":\s*\{\s*"expr":\s*\{\s*"Literal":\s*\{\s*"Value":\s*"7D"\s*\}\s*\}\s*\})', $markerDevPayload
-Set-Content -Path $visOldPath -Value $visDev -Encoding UTF8
+$markerDev = @'
+$1,
+            "markerColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "ThemeDataColor": {
+                      "ColorId": 7,
+                      "Percent": 0.2
+                    }
+                  }
+                }
+              }
+            }
+'@
+$visDev = [regex]::Replace($visDev, $markerAnchor, $markerDev.Replace("`r`n", "`n"))
+Write-Text $visOldPath $visDev
 
 $readmeDev = @"
 # ⚔️ KOMPENDIUM: ROZWIĄZYWANIE KONFLIKTÓW (GIT W POWER BI) ⚔️
@@ -40,7 +106,7 @@ Podczas łączenia gałęzi (merge), Git czasami nie wie, którą wersję pliku 
 Wtedy do akcji wkraczasz Ty! Poniżej znajdziesz najważniejsze zasady z warsztatów:
 
 🔵 **ACCEPT INCOMING CHANGE (Akceptuj przychodzącą zmianę)**
-* **Czym to jest:** Zmiana pochodząca z gałęzi, którą właśnie wciągasz (np. gdy wpisujesz 'git merge baza_MJ', to jest to zawartość 'baza_MJ').
+* **Czym to jest:** Zmiana pochodząca z gałęzi, którą właśnie wciągasz (np. gdy wpisujesz 'git merge dev_MJ', to jest to zawartość 'dev_MJ').
 * **Terminologia Git:** W dokumentacji oznaczane jako 'Theirs' (Ich).
 * **Kiedy używać:** Gdy pobierasz aktualizacje z serwera i wiesz, że praca zespołu nadpisuje Twoje stare wersje.
 
@@ -56,7 +122,7 @@ W prawym górnym rogu nad skonfliktowanym kodem (lub pod 3 kropkami) masz opcje 
 * **Column View (Side-by-side):** Ekran dzieli się na pół - Twoje zmiany po lewej, przychodzące po prawej.
 * **Open in Merge Editor:** Odpala potężne, dedykowane okno. Na górze widzisz 'Current' i 'Incoming', a na dole 'Result' (Ostateczny wynik). Niezastąpione przy trudnym DAXie!
 "@
-Set-Content -Path "README.md" -Value $readmeDev -Encoding UTF8
+Write-Text "README.md" $readmeDev
 
 $vis1Path = "Git Conflict.Report\definition\pages\7a1007e13b28c6d51010\visuals\bd321ca30d8572eac95e"
 $vis2Path = "Git Conflict.Report\definition\pages\7a1007e13b28c6d51010\visuals\632c3c5cf00bcacde04d"
@@ -69,33 +135,54 @@ $json1 = @'
 { "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json", "name": "bd321ca30d8572eac95e", "position": { "x": 852.99, "y": 64.66, "z": 20001, "height": 158.75, "width": 290, "tabOrder": 20001 }, "visual": { "visualType": "image", "objects": { "image": [ { "properties": { "sourceType": { "expr": { "Literal": { "Value": "'imageData'" } } }, "sourceField": { "expr": { "Measure": { "Expression": { "SourceRef": { "Entity": "_Global Measures" } }, "Property": "KPI Card Orders IMG" } } } } } ] }, "visualContainerObjects": { "dropShadow": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } } } } ], "border": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } }, "radius": { "expr": { "Literal": { "Value": "20D" } } } } } ], "background": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "transparency": { "expr": { "Literal": { "Value": "0D" } } } } } ] }, "drillFilterOtherVisuals": true } }
 '@
 $json2 = @'
-{ "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json", "name": "632c3c5cf00bcacde04d", "position": { "x": 543.75, "y": 66.25, "z": 20002, "height": 157.5, "width": 290, "tabOrder": 20002 }, "visual": { "visualType": "image", "objects": { "image": [ { "properties": { "sourceType": { "expr": { "Literal": { "Value": "'imageData'" } } }, "sourceField": { "expr": { "Measure": { "Expression": { "SourceRef": { "Entity": "_Global Measures" } }, "Property": "KPI Card Quota IMG" } } } } } ] }, "visualContainerObjects": { "dropShadow": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } }, "transparency": { "expr": { "Literal": { "Value": "35D" } } }, "shadowBlur": { "expr": { "Literal": { "Value": "15D" } } } } } ], "border": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } }, "radius": { "expr": { "Literal": { "Value": "20D" } } }, "width": { "expr": { "Literal": { "Value": "1D" } } } } } ], "background": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": 0 } } } } }, "transparency": { "expr": { "Literal": { "Value": "0D" } } } } }, "title": [ { "properties": { "show": { "expr": { "Literal": { "Value": "false" } } }, "titleWrap": { "expr": { "Literal": { "Value": "true" } } }, "fontColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#0F3460'" } } } } }, "fontSize": { "expr": { "Literal": { "Value": "'14'" } } }, "fontFamily": { "expr": { "Literal": { "Value": "'Arial'" } } } } } ], "spacing": [ { "properties": { "verticalSpacing": { "expr": { "Literal": { "Value": "2D" } } } }, "selector": { "id": "default" } } ], "padding": [ { "properties": { "top": { "expr": { "Literal": { "Value": "5D" } } }, "bottom": { "expr": { "Literal": { "Value": "0D" } } }, "left": { "expr": { "Literal": { "Value": "0D" } } }, "right": { "expr": { "Literal": { "Value": "0D" } } } } } ] }, "drillFilterOtherVisuals": true } }
+{ "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json", "name": "632c3c5cf00bcacde04d", "position": { "x": 543.75, "y": 66.25, "z": 20002, "height": 157.5, "width": 290, "tabOrder": 20002 }, "visual": { "visualType": "image", "objects": { "image": [ { "properties": { "sourceType": { "expr": { "Literal": { "Value": "'imageData'" } } }, "sourceField": { "expr": { "Measure": { "Expression": { "SourceRef": { "Entity": "_Global Measures" } }, "Property": "KPI Card Quota IMG" } } } } } ] }, "visualContainerObjects": { "dropShadow": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } }, "transparency": { "expr": { "Literal": { "Value": "35D" } } }, "shadowBlur": { "expr": { "Literal": { "Value": "15D" } } } } } ], "border": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } }, "radius": { "expr": { "Literal": { "Value": "20D" } } }, "width": { "expr": { "Literal": { "Value": "1D" } } } } } ], "background": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": 0 } } } } }, "transparency": { "expr": { "Literal": { "Value": "0D" } } } } } ], "title": [ { "properties": { "show": { "expr": { "Literal": { "Value": "false" } } }, "titleWrap": { "expr": { "Literal": { "Value": "true" } } }, "fontColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#0F3460'" } } } } }, "fontSize": { "expr": { "Literal": { "Value": "'14'" } } }, "fontFamily": { "expr": { "Literal": { "Value": "'Arial'" } } } } } ], "spacing": [ { "properties": { "verticalSpacing": { "expr": { "Literal": { "Value": "2D" } } } }, "selector": { "id": "default" } } ], "padding": [ { "properties": { "top": { "expr": { "Literal": { "Value": "5D" } } }, "bottom": { "expr": { "Literal": { "Value": "0D" } } }, "left": { "expr": { "Literal": { "Value": "0D" } } }, "right": { "expr": { "Literal": { "Value": "0D" } } } } } ] }, "drillFilterOtherVisuals": true } }
 '@
 $json3 = @'
 { "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json", "name": "093aef5b47cf7c8c4607", "position": { "x": 236.66, "y": 64.44, "z": 20003, "height": 158.88, "width": 290, "tabOrder": 20003 }, "visual": { "visualType": "image", "objects": { "image": [ { "properties": { "sourceType": { "expr": { "Literal": { "Value": "'imageData'" } } }, "sourceField": { "expr": { "Measure": { "Expression": { "SourceRef": { "Entity": "_Global Measures" } }, "Property": "KPI Card Net Sales IMG" } } } } } ] }, "visualContainerObjects": { "dropShadow": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "ThemeDataColor": { "ColorId": 0, "Percent": -0.1 } } } } }, "transparency": { "expr": { "Literal": { "Value": "35D" } } }, "shadowBlur": { "expr": { "Literal": { "Value": "15D" } } } } } ], "border": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "Literal": { "Value": "'#006084'" } } } } }, "radius": { "expr": { "Literal": { "Value": "20D" } } }, "width": { "expr": { "Literal": { "Value": "1D" } } } } } ], "background": [ { "properties": { "show": { "expr": { "Literal": { "Value": "true" } } }, "color": { "solid": { "color": { "expr": { "Literal": { "Value": "'#006084'" } } } } }, "transparency": { "expr": { "Literal": { "Value": "0D" } } } } } ], "title": [ { "properties": { "show": { "expr": { "Literal": { "Value": "false" } } }, "titleWrap": { "expr": { "Literal": { "Value": "true" } } }, "fontColor": { "solid": { "color": { "expr": { "Literal": { "Value": "'#0F3460'" } } } } }, "fontSize": { "expr": { "Literal": { "Value": "'14'" } } }, "fontFamily": { "expr": { "Literal": { "Value": "'Arial'" } } } } } ], "spacing": [ { "properties": { "verticalSpacing": { "expr": { "Literal": { "Value": "2D" } } } }, "selector": { "id": "default" } } ], "padding": [ { "properties": { "top": { "expr": { "Literal": { "Value": "5D" } } }, "bottom": { "expr": { "Literal": { "Value": "0D" } } }, "left": { "expr": { "Literal": { "Value": "0D" } } }, "right": { "expr": { "Literal": { "Value": "0D" } } } } } ] }, "drillFilterOtherVisuals": true } }
 '@
 
-Set-Content -Path "$vis1Path\visual.json" -Value $json1 -Encoding utf8
-Set-Content -Path "$vis2Path\visual.json" -Value $json2 -Encoding utf8
-Set-Content -Path "$vis3Path\visual.json" -Value $json3 -Encoding utf8
+Write-Text "$vis1Path\visual.json" $json1
+Write-Text "$vis2Path\visual.json" $json2
+Write-Text "$vis3Path\visual.json" $json3
 
 git add .
-git commit -m "Dev: Dodano 3 KPI, OMG test oraz marker ColorId 7" --quiet
+git commit -m "DEV: 3 nowe KPI, Rock-solid sales, Sales Team Leaderboard, Pareto 80/20, marker ColorId 7" --quiet
 
 # ==========================================
-# 4. GAŁĄŹ BAZA (Tworzona ze startCommit)
+# 4. GAŁĄŹ BAZA (tu stoimy podczas merge = Current)
 # ==========================================
 git checkout -B $baseBranch $startCommit 2>$null
 
-$tmdlBase = $tmdlOryginal -replace $regexTmdl1, '"Heck yeah, consistency ✔"'
-$tmdlBase = $tmdlBase -replace $regexTmdl2, '"Net Sales Updated"'
-$tmdlBase = $tmdlBase -replace $regexSVG, $noweSVG
-Set-Content -Path $tmdlPath -Value $tmdlBase -Encoding UTF8
+$tmdlBase = $tmdlOryginal
+$tmdlBase = Set-Once $tmdlBase $consistencyOld '_Consistent && NOT ( _Falling ), "✅ Stable growth (BAZA)"'
+$tmdlBase = Set-Once $tmdlBase $repsHeaderOld 'VAR _Header = "Best Sellers of the Month"'
+$tmdlBase = Set-Once $tmdlBase $productSubtitleOld 'VAR _Subtitle = "Top brands by revenue"'
+Write-Text $tmdlPath $tmdlBase
 
 $visBase = $visOryginal.Replace('2.11.0/schema.json', '2.12.0/schema.json')
-$markerBasePayload = '$1, "markerColor": { "solid": { "color": { "expr": { "Literal": { "Value": "''#07B189''" } } } } }, "markerShape": { "expr": { "Literal": { "Value": "''diamond''" } } }'
-$visBase = $visBase -replace '(?s)("markerSize":\s*\{\s*"expr":\s*\{\s*"Literal":\s*\{\s*"Value":\s*"7D"\s*\}\s*\}\s*\})', $markerBasePayload
-Set-Content -Path $visOldPath -Value $visBase -Encoding UTF8
+$markerBase = @'
+$1,
+            "markerColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#E94560'"
+                    }
+                  }
+                }
+              }
+            },
+            "markerShape": {
+              "expr": {
+                "Literal": {
+                  "Value": "'diamond'"
+                }
+              }
+            }
+'@
+$visBase = [regex]::Replace($visBase, $markerAnchor, $markerBase.Replace("`r`n", "`n"))
+Write-Text $visOldPath $visBase
 
 $readmeBase = @"
 # ⚔️ KOMPENDIUM: ROZWIĄZYWANIE KONFLIKTÓW (GIT W POWER BI) ⚔️
@@ -104,7 +191,7 @@ Podczas łączenia gałęzi (merge), Git czasami nie wie, którą wersję pliku 
 Wtedy do akcji wkraczasz Ty! Poniżej znajdziesz najważniejsze zasady z warsztatów:
 
 🟢 **ACCEPT CURRENT CHANGE (Akceptuj bieżącą zmianę)**
-* **Czym to jest:** Zmiana z gałęzi docelowej – czyli tej, na której AKTUALNIE stoisz (np. Twoja gałąź 'dev_MJ' / 'baza_MJ').
+* **Czym to jest:** Zmiana z gałęzi docelowej – czyli tej, na której AKTUALNIE stoisz (w tym ćwiczeniu: 'baza_MJ').
 * **Terminologia Git:** W dokumentacji oznaczane jako 'Ours' (Nasze).
 * **Kiedy używać:** Gdy wiesz, że Twój lokalny kod jest poprawny i nie chcesz pozwolić, by cokolwiek z zewnątrz go nadpisało.
 
@@ -118,13 +205,22 @@ Zrobiłeś commita bez podania nazwy, terminal nagle zrobił się na pełen ekra
 * Aby zapisać i wyjść: Wciśnij klawisz 'Esc', wpisz na klawiaturze ':wq' i kliknij Enter.
 * Aby wyjść awaryjnie bez zapisu: Wciśnij klawisz 'Esc', wpisz ':q!' i kliknij Enter.
 "@
-Set-Content -Path "README.md" -Value $readmeBase -Encoding UTF8
+Write-Text "README.md" $readmeBase
 
 git add .
-git commit -m "Baza: Heck yeah, zielony Hex, Diament oraz ratunek w VIM" --quiet
+git commit -m "BAZA: Stable growth, Best Sellers of the Month, nowy podtytuł produktów, czerwony diament" --quiet
 
 # ==========================================
 # 5. WYWOŁANIE KONFLIKTU
 # ==========================================
-Write-Host "Inicjowanie kolizji gałęzi..." -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Stoisz na gałęzi '$baseBranch' (Current) i wciągasz '$devBranch' (Incoming)..." -ForegroundColor Cyan
 git merge $devBranch
+
+Write-Host ""
+Write-Host "Co sprawdzić w panelu Source Control -> Merge Changes:" -ForegroundColor Yellow
+Write-Host "  _Global Measures.tmdl  2 konflikty: etykieta w 'HTML_KPI_Card_Dynamic' oraz nagłówek 'Reps Headaer'"
+Write-Host "  visual.json            2 bloki jednego konfliktu: kolor markera i kształt markera (oba rozstrzygnij tak samo!)"
+Write-Host "  README.md              1 konflikt: dwie połówki ściągi"
+Write-Host "Git scalił sam: 3 nowe KPI, nagłówek 'Sales Shares' (tylko DEV), podtytuł 'Product Shares' (tylko BAZA)." -ForegroundColor Green
+Write-Host "Coś poszło nie tak? git merge --abort  i uruchom skrypt jeszcze raz." -ForegroundColor DarkGray
