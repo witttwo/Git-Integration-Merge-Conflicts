@@ -764,7 +764,7 @@ Write-Text "$vis1Path\visual.json" $json1.Replace("`r`n", "`n")
 Write-Text "$vis2Path\visual.json" $json2.Replace("`r`n", "`n")
 Write-Text "$vis3Path\visual.json" $json3.Replace("`r`n", "`n")
 
-git add .
+git -c core.safecrlf=false add .
 git commit -m "DEV: 3 nowe KPI, Rock-solid sales, Sales Team Leaderboard, Territory Pareto 80/20, marker ColorId 7" --quiet
 
 # ==========================================
@@ -826,7 +826,7 @@ Jeśli po `git commit` bez opisu terminal zamienił się w pełnoekranowy edytor
 '@
 Write-Text "README.md" $readmeBase
 
-git add .
+git -c core.safecrlf=false add .
 git commit -m "BAZA: Stable growth, Best Sellers of the Month, Sales by Territory, nowy podtytuł produktów, czerwony diament" --quiet
 
 # ==========================================
