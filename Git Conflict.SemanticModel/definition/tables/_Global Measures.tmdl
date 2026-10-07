@@ -794,7 +794,7 @@ table '_Global Measures'
 
 	measure 'Reps Headaer' =
 			
-			VAR _Header = "Sales reps"
+			VAR _Header = "Sales Representatives"
 			VAR _Subtitle =  "Select a rep to explore their sales and quota in more detail"
 			RETURN
 			Custom_Header_Ranking(
