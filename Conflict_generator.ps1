@@ -101,29 +101,29 @@ $1,
 $visDev = [regex]::Replace($visDev, $markerAnchor, $markerDev.Replace("`r`n", "`n"))
 Write-Text $visOldPath $visDev
 
-$readmeDev = @"
-# ⚔️ KOMPENDIUM: ROZWIĄZYWANIE KONFLIKTÓW (GIT W POWER BI) ⚔️
+$readmeDev = @'
+# Rozwiązywanie konfliktów w Gicie (Power BI)
 
-Podczas łączenia gałęzi (merge), Git czasami nie wie, którą wersję pliku zachować. 
-Wtedy do akcji wkraczasz Ty! Poniżej znajdziesz najważniejsze zasady z warsztatów:
+Kiedy dwie gałęzie zmieniają to samo miejsce w pliku, Git nie wie, którą wersję zostawić, i prosi Cię o decyzję. Poniżej najważniejsze zasady z warsztatu.
 
-🔵 **ACCEPT INCOMING CHANGE (Akceptuj przychodzącą zmianę)**
-* **Czym to jest:** Zmiana pochodząca z gałęzi, którą właśnie wciągasz (np. gdy wpisujesz 'git merge dev_MJ', to jest to zawartość 'dev_MJ').
-* **Terminologia Git:** W dokumentacji oznaczane jako 'Theirs' (Ich).
-* **Kiedy używać:** Gdy pobierasz aktualizacje z serwera i wiesz, że praca zespołu nadpisuje Twoje stare wersje.
+## Accept Incoming Change
 
-❌ **A CO JEŚLI OBIE WERSJE SĄ ZŁE? (BRAK "REJECT BOTH")**
-W VS Code nie ma przycisku odrzucenia obu zmian. Pamiętaj, że ostateczny kod to po prostu zwykły plik tekstowy!
-1. Zignoruj kolorowe przyciski "Accept...".
-2. Zaznacz cały zepsuty blok myszką (razem ze znacznikami <<<<<<< HEAD, ======= oraz >>>>>>>).
-3. Wciśnij Delete i po prostu napisz swój poprawny kod w tym miejscu. Zapisz plik!
+Bierze wersję z gałęzi, którą wciągasz. W ćwiczeniu to `dev_XX`, bo wpisujesz `git merge dev_XX`. W dokumentacji Gita nazywa się to "theirs". Wybierz, gdy zmiany z zewnątrz są nowsze albo lepsze od Twoich.
 
-👁️ **TIP: ZAAWANSOWANE WIDOKI KONFLIKTÓW W VS CODE**
-W prawym górnym rogu nad skonfliktowanym kodem (lub pod 3 kropkami) masz opcje widoku:
-* **Inline View:** Wszystko zlane w jeden tekst z kolorowymi blokami (widok domyślny).
-* **Column View (Side-by-side):** Ekran dzieli się na pół - Twoje zmiany po lewej, przychodzące po prawej.
-* **Open in Merge Editor:** Odpala potężne, dedykowane okno. Na górze widzisz 'Current' i 'Incoming', a na dole 'Result' (Ostateczny wynik). Niezastąpione przy trudnym DAXie!
-"@
+## Gdy obie wersje są złe
+
+VS Code nie ma przycisku "odrzuć obie". Plik z konfliktem to zwykły tekst, więc:
+
+1. Zaznacz cały blok razem ze znacznikami `<<<<<<<`, `=======` i `>>>>>>>`.
+2. Usuń go i wpisz poprawną wersję.
+3. Zapisz plik.
+
+## Widoki konfliktu w VS Code
+
+- Inline: obie wersje w jednym pliku, oznaczone kolorami (widok domyślny).
+- Side-by-side: Twoja wersja po lewej, przychodząca po prawej.
+- Merge Editor: Current i Incoming na górze, wynik na dole. Przydaje się przy dłuższym DAX-ie.
+'@
 Write-Text "README.md" $readmeDev
 
 $vis1Path = "Git Conflict.Report\definition\pages\7a1007e13b28c6d51010\visuals\bd321ca30d8572eac95e"
@@ -804,27 +804,26 @@ $1,
 $visBase = [regex]::Replace($visBase, $markerAnchor, $markerBase.Replace("`r`n", "`n"))
 Write-Text $visOldPath $visBase
 
-$readmeBase = @"
-# ⚔️ KOMPENDIUM: ROZWIĄZYWANIE KONFLIKTÓW (GIT W POWER BI) ⚔️
+$readmeBase = @'
+# Rozwiązywanie konfliktów w Gicie (Power BI)
 
-Podczas łączenia gałęzi (merge), Git czasami nie wie, którą wersję pliku zachować. 
-Wtedy do akcji wkraczasz Ty! Poniżej znajdziesz najważniejsze zasady z warsztatów:
+Kiedy dwie gałęzie zmieniają to samo miejsce w pliku, Git nie wie, którą wersję zostawić, i prosi Cię o decyzję. Poniżej najważniejsze zasady z warsztatu.
 
-🟢 **ACCEPT CURRENT CHANGE (Akceptuj bieżącą zmianę)**
-* **Czym to jest:** Zmiana z gałęzi docelowej – czyli tej, na której AKTUALNIE stoisz (w tym ćwiczeniu: 'baza_MJ').
-* **Terminologia Git:** W dokumentacji oznaczane jako 'Ours' (Nasze).
-* **Kiedy używać:** Gdy wiesz, że Twój lokalny kod jest poprawny i nie chcesz pozwolić, by cokolwiek z zewnątrz go nadpisało.
+## Accept Current Change
 
-🛑 **KOŁO RATUNKOWE 1: PRZERWANIE MERGE'A**
-Wybuchło 50 plików na czerwono? Zmiany są przerażające i wolisz zapytać kogoś o pomoc?
-* Wpisz w terminalu: 'git merge --abort'
-* Twój projekt zostanie natychmiast, całkowicie i bezpiecznie przywrócony do stanu sprzed wpisania komendy merge. Możesz odetchnąć.
+Zostawia wersję z gałęzi, na której stoisz. W ćwiczeniu to `baza_XX`. W dokumentacji Gita nazywa się to "ours". Wybierz, gdy Twoja wersja jest poprawna i nie chcesz, żeby nadpisało ją coś z zewnątrz.
 
-😱 **KOŁO RATUNKOWE 2: UWIĘZIENI W TERMINALU (EDYTOR VIM)**
-Zrobiłeś commita bez podania nazwy, terminal nagle zrobił się na pełen ekran, ma dziwne tyldy '~' i nic nie możesz kliknąć? Przypadkiem wywołałeś linuksowy edytor VIM!
-* Aby zapisać i wyjść: Wciśnij klawisz 'Esc', wpisz na klawiaturze ':wq' i kliknij Enter.
-* Aby wyjść awaryjnie bez zapisu: Wciśnij klawisz 'Esc', wpisz ':q!' i kliknij Enter.
-"@
+## Przerwanie merge'a
+
+Za dużo konfliktów albo nie wiesz, co wybrać? Wpisz `git merge --abort`. Projekt wraca do stanu sprzed merge'a i nic nie tracisz.
+
+## Wyjście z edytora Vim
+
+Jeśli po `git commit` bez opisu terminal zamienił się w pełnoekranowy edytor z tyldami (~), to Vim.
+
+- Zapis i wyjście: Esc, potem `:wq` i Enter.
+- Wyjście bez zapisu: Esc, potem `:q!` i Enter.
+'@
 Write-Text "README.md" $readmeBase
 
 git add .
