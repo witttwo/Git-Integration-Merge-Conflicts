@@ -56,13 +56,13 @@ $visOldPath = "Git Conflict.Report\definition\pages\7a1007e13b28c6d51010\visuals
 # Fragmenty, które zmieniamy. Każdy konflikt ma INNY tekst i inną akcję do przećwiczenia:
 #   MIARY (.tmdl), 3 konflikty:
 #     1. 'HTML_KPI_Card_Dynamic' (etykieta)  -> Accept Current
-#     2. 'Reps Headaer' (nagłówek)           -> ręczna edycja (własny tekst)
+#     2. 'Reps Headaer' (nagłówek)           -> ręczna edycja (własny tekst); na DEV 2 commity (Claude + uczestnik)
 #     3. 'Sales Shares' (nagłówek)           -> Accept Incoming
 #   WIZUAL (visual.json): kolor + kształt markera -> Accept Incoming
 #   README.md                                     -> Accept Both
 #   BEZ KONFLIKTU: podtytuł 'Product Shares' zmienia tylko BAZA -> Git scala sam
 $consistencyOld = '_Consistent && NOT ( _Falling ), "High sales consistency ✔"'
-$repsHeaderOld = 'VAR _Header = "Sales reps"'
+$repsHeaderOld = 'VAR _Header = "Sales Reps"'
 $salesShareHeaderOld = 'VAR _Header = "Sales share"'
 $productSubtitleOld = 'VAR _Subtitle = "Which products and brands generate the most sales?"'
 $markerAnchor = '(?s)("markerSize":\s*\{\s*"expr":\s*\{\s*"Literal":\s*\{\s*"Value":\s*"7D"\s*\}\s*\}\s*\})'
@@ -76,9 +76,16 @@ git checkout -B $devBranch $startCommit 2>$null
 $tmdlOryginal = Read-Text $tmdlPath
 $visOryginal = Read-Text $visOldPath
 
-$tmdlDev = $tmdlOryginal
+# Zmiana "po cichu" na DEV: osobny, wcześniejszy commit innego autora (Claude) w tej samej linii.
+# Po merge'u Line History nagłówka 'Reps Headaer' ma więcej kroków, a Search Commits po autorze coś znajduje.
+$tmdlDev0 = Set-Once $tmdlOryginal $repsHeaderOld 'VAR _Header = "Sales Team"'
+Write-Text $tmdlPath $tmdlDev0
+git -c core.safecrlf=false add .
+git -c user.name="Claude" -c user.email="noreply@anthropic.com" commit -m "DEV: krótszy nagłówek rankingu (Sales Team)" --quiet
+
+$tmdlDev = $tmdlDev0
 $tmdlDev = Set-Once $tmdlDev $consistencyOld '_Consistent && NOT ( _Falling ), "Rock-solid sales ✔"'
-$tmdlDev = Set-Once $tmdlDev $repsHeaderOld 'VAR _Header = "Sales Team Leaderboard"'
+$tmdlDev = Set-Once $tmdlDev 'VAR _Header = "Sales Team"' 'VAR _Header = "Sales Team Leaderboard"'
 $tmdlDev = Set-Once $tmdlDev $salesShareHeaderOld 'VAR _Header = "Territory Pareto 80/20"'
 Write-Text $tmdlPath $tmdlDev
 
