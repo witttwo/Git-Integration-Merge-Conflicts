@@ -1,26 +1,18 @@
-# Git Integration: Merge Conflicts
+# Rozwiązywanie konfliktów w Gicie (Power BI)
 
-Repozytorium ćwiczeniowe do warsztatu o konfliktach w Gicie (projekt Power BI w formacie PBIP).
+Kiedy dwie gałęzie zmieniają to samo miejsce w pliku, Git nie wie, którą wersję zostawić, i prosi Cię o decyzję. Poniżej najważniejsze zasady z warsztatu.
 
-## Przed warsztatem
+## Kiedy zostawić swoją wersję
 
-1. Sklonuj repo do krótkiej ścieżki (np. `C:\Git\`), nie do OneDrive.
-2. Przełącz się na gałąź `workshop`.
-3. Zainstaluj w VS Code rozszerzenie **PowerShell** (Microsoft).
+Przycisk "Accept Current Change" zostawia wersję z gałęzi, na której stoisz. W ćwiczeniu to `baza_XX`. W dokumentacji Gita nazywa się to "ours". Wybierz, gdy Twoja wersja jest poprawna i nie chcesz, żeby nadpisało ją coś z zewnątrz.
 
-## Na warsztacie
+## Przerwanie merge'a
 
-W terminalu VS Code, w folderze repo:
+Za dużo konfliktów albo nie wiesz, co wybrać? Wpisz `git merge --abort`. Projekt wraca do stanu sprzed merge'a i nic nie tracisz.
 
-```powershell
-.\Conflict_generator.ps1
-```
+## Wyjście z edytora Vim
 
-Gdy Windows zablokuje skrypt:
+Jeśli po `git commit` bez opisu terminal zamienił się w pełnoekranowy edytor z tyldami (~), to Vim.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Conflict_generator.ps1
-```
-
-Skrypt pyta o inicjały, tworzy gałęzie `baza_<inicjały>` i `dev_<inicjały>` i scala je, wywołując konflikt.
-Coś poszło nie tak? `git merge --abort`, a potem uruchom skrypt jeszcze raz.
+- Zapis i wyjście: Esc, potem `:wq` i Enter.
+- Wyjście bez zapisu: Esc, potem `:q!` i Enter.
