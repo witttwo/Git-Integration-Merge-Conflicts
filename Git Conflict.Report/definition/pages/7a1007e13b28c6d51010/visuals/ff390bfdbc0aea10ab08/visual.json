@@ -239,13 +239,6 @@
                   }
                 }
               }
-            },
-            "markerShape": {
-              "expr": {
-                "Literal": {
-                  "Value": "'diamond'"
-                }
-              }
             }
           }
         },
