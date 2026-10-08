@@ -55,7 +55,7 @@ table '_Global Measures'
 			-- ===== NARRATIVE: short natural sentences, calm -> drama (PL register) =====
 			VAR MainTitle =
 			    SWITCH ( TRUE (),
-			        _Consistent && NOT ( _Falling ), "High sales consistency ✔",
+			        _Consistent && NOT ( _Falling ), "Rock-solid sales ✔",
 			        _Consistent,                     "Consistent, but trending down",
 			        _Moderate,                       "Moderate sales consistency",
 			                                         "Volatile sales month to month"
@@ -794,7 +794,7 @@ table '_Global Measures'
 
 	measure 'Reps Headaer' =
 			
-			VAR _Header = "Sales Team"
+			VAR _Header = "Sales Team Leaderboard"
 			VAR _Subtitle =  "Select a rep to explore their sales and quota in more detail"
 			RETURN
 			Custom_Header_Ranking(
@@ -851,7 +851,7 @@ table '_Global Measures'
 
 	measure 'Sales Shares' =
 			
-			VAR _Header = "Sales share"
+			VAR _Header = "Territory Pareto 80/20"
 			VAR _Subtitle = "Which territories account for 80% of total sales?"
 			RETURN
 			Custom_Header_Ranking(

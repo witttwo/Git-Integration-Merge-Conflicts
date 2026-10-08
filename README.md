@@ -1,26 +1,21 @@
-# Git Integration: Merge Conflicts
+# Rozwiązywanie konfliktów w Gicie (Power BI)
 
-Repozytorium ćwiczeniowe do warsztatu o konfliktach w Gicie (projekt Power BI w formacie PBIP).
+Kiedy dwie gałęzie zmieniają to samo miejsce w pliku, Git nie wie, którą wersję zostawić, i prosi Cię o decyzję. Poniżej najważniejsze zasady z warsztatu.
 
-## Przed warsztatem
+## Kiedy wziąć wersję z zewnątrz
 
-1. Sklonuj repo do krótkiej ścieżki (np. `C:\Git\`), nie do OneDrive.
-2. Przełącz się na gałąź `workshop`.
-3. Zainstaluj w VS Code rozszerzenie **PowerShell** (Microsoft).
+Przycisk "Accept Incoming Change" bierze wersję z gałęzi, którą wciągasz. W ćwiczeniu to `dev_XX`, bo wpisujesz `git merge dev_XX`. W dokumentacji Gita nazywa się to "theirs". Wybierz, gdy zmiany z zewnątrz są nowsze albo lepsze od Twoich.
 
-## Na warsztacie
+## Gdy obie wersje są złe
 
-W terminalu VS Code, w folderze repo:
+VS Code nie ma przycisku "odrzuć obie". Plik z konfliktem to zwykły tekst, więc:
 
-```powershell
-.\Conflict_generator.ps1
-```
+1. Zaznacz cały blok razem ze znacznikami `<<<<<<<`, `=======` i `>>>>>>>`.
+2. Usuń go i wpisz poprawną wersję.
+3. Zapisz plik.
 
-Gdy Windows zablokuje skrypt:
+## Widoki konfliktu w VS Code
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Conflict_generator.ps1
-```
-
-Skrypt pyta o inicjały, tworzy gałęzie `baza_<inicjały>` i `dev_<inicjały>` i scala je, wywołując konflikt.
-Coś poszło nie tak? `git merge --abort`, a potem uruchom skrypt jeszcze raz.
+- Inline: obie wersje w jednym pliku, oznaczone kolorami (widok domyślny).
+- Side-by-side: Twoja wersja po lewej, przychodząca po prawej.
+- Merge Editor: Current i Incoming na górze, wynik na dole. Przydaje się przy dłuższym DAX-ie.
